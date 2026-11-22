@@ -13,24 +13,24 @@ Your plugin stays in your own repository and package. Listing it means opening a
 
 An entry holds the package name, a title (at most 80 characters) and a description (at most 300), the source repository, the licence, the author's name and GitHub login, and a list of versions. Each version has its exact version number, the npm tarball's `sha512-` integrity string, and the `engines` ranges the package declares. A listing pins exact versions, never ranges. The maintainers fill in who added the entry and the "Tested with Delorun" badges; leave both out.
 
-To list a new version of a plugin that is already listed, open a pull request that adds the version to its entry. Each new version is checked again in full.
+To list a new version of a plugin that is already listed, open a pull request that adds the version to its entry. Each new version must meet every listing requirement again.
 
 ## What a listing needs
 
-Every listing pull request, and every new version of a listed plugin, needs all four of these before the owner merges it:
+These are the listing requirements. The maintainers check all four on every listing pull request, and on every new version of a listed plugin, before it is merged:
 
-- **A passing bench card.** The test bench installs the plugin in a throwaway Delorun, starts it, draws its screens, uses its main feature once, restarts, updates and removes it, and records what it saw. The card must pass.
-- **An automatic scan of the exact package.** The scan looks for install scripts, credentials read together with network use, and code fetched at run time.
-- **An agent review on the pull request.** An agent reads the plugin and posts its review there.
-- **An exact version with its integrity hash.** The entry names the version and its `integrity` string, and an install pins both.
+- **A passing bench card.** The maintainers run the plugin on the test bench, which installs the plugin in a throwaway Delorun, starts it, draws its screens, uses its main feature once, restarts, updates and removes it, and records what it saw. The card must pass.
+- **An automatic scan of the exact package.** The maintainers scan the published package for install scripts, credentials read together with network use, and code fetched at run time.
+- **An agent review on the pull request.** The maintainers have an agent read the plugin and post its review there.
+- **An exact version with its integrity hash.** The entry names the version and its `integrity` string, and the maintainers check that the string matches the published package.
 
-A plugin that does something risky is listed only if it declares the behaviour and explains it. The finding then appears in plain words on its card and its install screen. Hidden or undeclared behaviour is refused.
+A plugin that does something risky is listed only if it declares the behaviour and explains it. The finding then appears in plain words on its bench card. Hidden or undeclared behaviour is refused.
 
 A listing means the plugin was checked and tested at that version. It does not mean the plugin is safe, audited or endorsed, and Delorun does not run a plugin audit.
 
 ## The privacy markers
 
-Each plugin's card in Delorun shows eight privacy markers:
+Each plugin's bench card shows eight privacy markers:
 
 - Your code
 - Your chats
