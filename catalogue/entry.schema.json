@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TwickaS/delorun-plugins/catalogue/entry.schema.json",
+  "title": "Catalogue entry",
+  "description": "One listed plugin. The fields follow the entry and version tables of the [catalogue contract](https://github.com/TwickaS/delorun/blob/main/delorun/docs/contracts/c13-catalogue-revocation.md), minus addedBy, which the publish job fills from the pull request. Badges are written by the publish job from corpus results; an entry may omit them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["package", "title", "description", "repository", "license", "author", "versions"],
+  "properties": {
+    "package": { "$ref": "#/$defs/packageName" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "repository": { "$ref": "#/$defs/httpsUrl" },
+    "license": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+() -]*$", "maxLength": 200 },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "github"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "github": { "$ref": "#/$defs/githubLogin" }
+      }
+    },
+    "versions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/version" }
+    }
+  },
+  "$defs": {
+    "packageName": {
+      "type": "string",
+      "maxLength": 214,
+      "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "httpsUrl": { "type": "string", "maxLength": 2000, "pattern": "^https://[^\\s/]+[^\\s]*$" },
+    "githubLogin": { "type": "string", "pattern": "^[A-Za-z0-9]([A-Za-z0-9-]{0,38})$" },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "integrity", "engines"],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]{86}==$" },
+        "engines": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dsh": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "delorun": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        "badges": { "type": "array", "items": { "$ref": "#/$defs/badge" } },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      }
+    },
+    "badge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "delorun", "dsh", "channel", "result", "corpus", "run", "recorded"],
+      "properties": {
+        "kind": { "const": "tested-with-delorun" },
+        "delorun": { "$ref": "#/$defs/semver" },
+        "dsh": { "$ref": "#/$defs/semver" },
+        "channel": { "enum": ["stable", "beta"] },
+        "result": { "enum": ["passed", "failed"] },
+        "corpus": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "run": { "$ref": "#/$defs/httpsUrl" },
+        "recorded": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "title", "detail", "author", "reported"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]{1,64}$" },
+        "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["role", "name", "github"],
+          "properties": {
+            "role": { "enum": ["plugin-author", "reviewer"] },
+            "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "github": { "$ref": "#/$defs/githubLogin" }
+          }
+        },
+        "reported": { "$ref": "#/$defs/date" },
+        "fixedIn": { "$ref": "#/$defs/semver" }
+      }
+    }
+  }
+}
