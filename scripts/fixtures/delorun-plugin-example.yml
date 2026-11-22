@@ -1,0 +1,30 @@
+# An example catalogue entry. Copy it to catalogue/entries/<name>.yml and change every value.
+# The file name is the package name; a scoped name @scope/name is written @scope__name.yml.
+package: delorun-plugin-example
+title: Example plugin
+description: Shows what a catalogue entry looks like. It does nothing else.
+repository: https://github.com/example-author/delorun-plugin-example
+license: MIT
+author:
+  name: Example Author
+  github: example-author
+versions:
+  # Newest first. List exact versions, never ranges.
+  - version: 1.2.0
+    # The npm tarball's integrity string: npm view <package>@<version> dist.integrity
+    integrity: sha512-LvPFs39Sx40Ft2AJ3BzEsP87jZWc4c5vn6nJLNyql1mpdPC71iet3DvsX9lNdiMSeRiRonqnSpClwEChJQbqrA==
+    # Copy the ranges from the package's own manifest. Declare engines.delorun to target Delorun.
+    engines:
+      dsh: ^0.2.2
+      delorun: ">=0.1.0"
+    # Optional. A claim by its author, which Delorun does not verify.
+    findings:
+      - id: reads-home-folder
+        severity: info
+        title: Reads files in the home folder
+        detail: The plugin reads the settings file in the home folder to find its own options.
+        author:
+          role: plugin-author
+          name: Example Author
+          github: example-author
+        reported: 2026-01-15

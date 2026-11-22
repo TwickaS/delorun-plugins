@@ -1,0 +1,18 @@
+{
+  "name": "delorun-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Plugins and the plugin catalogue for Delorun",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test",
+    "validate": "node scripts/validate-entries.mjs"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  }
+}

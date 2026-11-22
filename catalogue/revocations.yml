@@ -1,0 +1,4 @@
+# Plugin versions that Delorun disables at their next load.
+# Each item has: package, versions, reason, message, revoked, and optionally advisory.
+# The publish job adds the sequence number and the issue and expiry times when it signs the list.
+revocations: []
