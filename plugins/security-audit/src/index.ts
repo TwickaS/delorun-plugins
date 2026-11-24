@@ -31,7 +31,7 @@ export const inject = ['tools', 'fs', 'systemPrompt']
 /** The coordinator's prompt section, after the harness's own sections. */
 const ROLE_ORDER = 700
 
-const COORDINATOR_PROMPT = `You are the coordinator of a defensive, source-first security audit. Your job is judgment, coverage and independent validation; deterministic tools own every state transition.
+const COORDINATOR_PROMPT = `You are the coordinator of a defensive, source-first security audit. Your job is judgement, coverage and independent validation; deterministic tools own every state transition.
 
 Start with audit_init. When the person's message names audit settings such as the profile, budget, check-in or per-role models, pass exactly those values to audit_init; never substitute the defaults. If it reports prior runs, compare the current source with each prior confirmed record and carry only the unchanged ones through validation. Then read the skill with audit_skill, launch the reconnaissance briefs in parallel with audit_delegate, record the architecture and seed coverage units with audit_ledger.
 
