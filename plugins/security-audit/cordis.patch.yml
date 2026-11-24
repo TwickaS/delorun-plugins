@@ -1,0 +1,73 @@
+# The rows a profile adds when it lists this package as a bundle: the studio half,
+# and the "Security audit" chat mode that mounts the coordinator's tools and prompt.
+#
+# mount is required and has no default. 'studio' registers nothing on the host, so
+# the root row exists only to make the studio serve lib/client.js. 'agent' registers
+# the audit tools and the coordinator's prompt section inside the preset, where they
+# belong to chats running this mode and to the subagents they spawn.
+- insert:
+    - id: security-audit
+      name: '@delorun/plugin-security-audit'
+      config:
+        mount: 'studio'
+
+    # The only preset this plugin declares. The roles are not presets: the
+    # coordinator spawns them with the subagent capability.
+    - id: preset-security-audit
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: security-audit
+        name: 'Security audit'
+        description: A source-level audit of this repository: coverage-led hunting, independent validation and a target-neutral report.
+        order: 40
+        plugins:
+          - id: security-audit-agent
+            name: '@delorun/plugin-security-audit'
+            config:
+              mount: 'agent'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              applyPatch: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          # A long run writes many tool results; the pruner keeps the window bounded.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
