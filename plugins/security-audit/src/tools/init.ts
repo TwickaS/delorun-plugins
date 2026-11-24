@@ -56,15 +56,14 @@ const SEED = ['reconnaissance', 'rc'] as const
  * The list that seeds the ledger, and the units it starts from.
  * @param profile - the run's profile.
  * @param seed - the seed the caller asked for, or `undefined`.
- * @returns the seed and its units; a reconnaissance seed starts from no unit.
+ * @returns the seed and its units; a reconnaissance seed starts from no unit. Any profile may
+ *   ask for the rc seed; the rc profile itself always seeds, so its own seed defaults to `rc`.
  * @throws {Error} when the rc profile and a seed other than `rc` are asked for together.
  */
 function resolveSeed(profile: (typeof PROFILE)[number], seed: CoverageSeed | undefined): { readonly seed: CoverageSeed; readonly units: readonly LedgerUnit[] } {
-  if (profile === 'rc') {
-    if (seed !== undefined && seed !== 'rc') throw new Error("the rc profile seeds Delorun's threat-model boundaries; omit seed or set it to 'rc'")
-    return { seed: 'rc', units: seedUnits([], rcSeedUnits()).ledger }
-  }
-  return { seed: seed ?? 'reconnaissance', units: [] }
+  if (profile === 'rc' && seed !== undefined && seed !== 'rc') throw new Error("the rc profile seeds Delorun's threat-model boundaries; omit seed or set it to 'rc'")
+  const resolved: CoverageSeed = profile === 'rc' ? 'rc' : seed ?? 'reconnaissance'
+  return { seed: resolved, units: resolved === 'rc' ? seedUnits([], rcSeedUnits()).ledger : [] }
 }
 
 /**
@@ -110,7 +109,7 @@ export function registerInitTool(ctx: Context, config: Config): void {
     description: 'Create a security-audit run in this workspace: settle the intake, check the confinement facts the skill requires, write the run directory and its seven shared files, and record the source revision. Call this once before any other audit tool.',
     parameters: {
       profile: { type: 'string', enum: [...PROFILE], description: "The coverage profile. Default standard. 'rc' is the release-candidate profile: it seeds one coverage unit for each boundary of Delorun's threat model and otherwise runs with the deep profile's settings." },
-      seed: { type: 'string', enum: [...SEED], description: 'Which list seeds the ledger: reconnaissance derives units as the skill specifies, rc uses the release-candidate boundaries from the threat model. Defaults to rc for the rc profile and reconnaissance otherwise.' },
+      seed: { type: 'string', enum: [...SEED], description: 'Which list seeds the ledger: reconnaissance derives units as the skill specifies, rc uses the release-candidate boundaries from the threat model. The rc profile always seeds from the threat model; any other profile may set rc too. Defaults to reconnaissance.' },
       scope_paths: { type: 'array', items: { type: 'string' }, description: 'Repository-relative directories this run audits. Omit for the whole repository.' },
       budget: { type: 'integer', description: 'Maximum agent invocations across all phases. Omit to have the run propose one from the target size.' },
       check_in: { type: 'string', enum: [...CHECK_IN], description: 'When the coordinator may interrupt an unattended run. Default straight_through.' },

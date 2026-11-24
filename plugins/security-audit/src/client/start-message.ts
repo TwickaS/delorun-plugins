@@ -35,6 +35,8 @@ export interface StartMessageInput {
   readonly target: string | undefined
   /** The chosen profile. */
   readonly profile: AuditProfile
+  /** Whether the RC profile is on, which seeds coverage from the threat model's boundaries. */
+  readonly rc?: boolean
   /** The maximum agent invocations, or `null` for no limit. */
   readonly budget: number | null
   /** The chosen check-in timing. */
@@ -59,11 +61,15 @@ export function buildStartMessage(t: Translate, input: StartMessageInput): strin
     after_recon: t('strip.checkIn.after_recon'),
     every_stage: t('strip.checkIn.every_stage'),
   }[input.checkIn]
-  const profile = {
-    quick: t('strip.profile.quick'),
-    standard: t('strip.profile.standard'),
-    deep: t('strip.profile.deep'),
-  }[input.profile]
+  const rc = input.rc === true
+  const profile = rc
+    ? t('strip.profile.rc')
+    : {
+      quick: t('strip.profile.quick'),
+      standard: t('strip.profile.standard'),
+      deep: t('strip.profile.deep'),
+    }[input.profile]
+  const seed = rc ? t('strip.seed.rc') : t('strip.seed.reconnaissance')
   const roles = {
     recon: t('strip.role.recon'),
     hunter: t('strip.role.hunter'),
@@ -78,6 +84,7 @@ export function buildStartMessage(t: Translate, input: StartMessageInput): strin
   return t('strip.message', {
     target: input.target ?? '.',
     profile,
+    seed,
     budget,
     checkIn,
     models,

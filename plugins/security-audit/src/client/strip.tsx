@@ -156,6 +156,7 @@ export function SecurityAuditStrip(props: SecurityAuditStripProps): ReactNode {
   const summary = useSessions(state => state.byId[sessionId])
   const catalogue = useAuditModels(state => state)
   const [profile, setProfile] = useState<AuditProfile>('standard')
+  const [rc, setRc] = useState(false)
   const [budget, setBudget] = useState<number | null>(null)
   const [checkIn, setCheckIn] = useState<CheckIn>('after_recon')
   const [models, setModels] = useState<Partial<Record<ModeledRole, RoleModel>>>({})
@@ -167,7 +168,7 @@ export function SecurityAuditStrip(props: SecurityAuditStripProps): ReactNode {
   const menu = useMemo(() => modelMenu(catalogue.groups, models, t), [catalogue.groups, models, t])
   if (!auditing) return null
   const write = (): void => {
-    const text = buildStartMessage(t, { target: summary?.cwd, profile, budget, checkIn, models })
+    const text = buildStartMessage(t, { target: summary?.cwd, profile, rc, budget, checkIn, models })
     setWritten(inputActions.insertText(text, inputActions.captureInsertion()))
   }
   const chooseModel = (id: string): void => {
@@ -187,13 +188,26 @@ export function SecurityAuditStrip(props: SecurityAuditStripProps): ReactNode {
         <div className="sa-strip-row">
           <span className="sa-strip-lead" aria-hidden><IconShieldOutlineRegular size={14} /></span>
           <span className="sa-strip-title">{t('strip.title')}</span>
+          {!rc && (
+            <ChipMenu
+              name={t('strip.profile')}
+              value={t(`strip.profile.${profile}`)}
+              label={t('strip.profile')}
+              selectedId={profile}
+              items={PROFILES.map(value => ({ id: value, label: t(`strip.profile.${value}`) }))}
+              onSelect={(id) => { setProfile(id as AuditProfile) }}
+            />
+          )}
           <ChipMenu
-            name={t('strip.profile')}
-            value={t(`strip.profile.${profile}`)}
-            label={t('strip.profile')}
-            selectedId={profile}
-            items={PROFILES.map(value => ({ id: value, label: t(`strip.profile.${value}`) }))}
-            onSelect={(id) => { setProfile(id as AuditProfile) }}
+            name={t('strip.rc')}
+            value={rc ? t('strip.rc.on') : t('strip.rc.off')}
+            label={t('strip.rc')}
+            selectedId={rc ? 'on' : 'off'}
+            items={[
+              { id: 'off', label: t('strip.rc.off') },
+              { id: 'on', label: t('strip.rc.on') },
+            ]}
+            onSelect={(id) => { setRc(id === 'on') }}
           />
           <ChipMenu
             name={t('strip.budget')}

@@ -22,7 +22,7 @@ A security audit looks for places where the code lets something happen that its 
 ## Run an audit
 
 1. Open a chat in the workspace that holds the repository, and choose **Security audit** in the mode list.
-2. The **Audit settings** bar appears above the message box. Choose a profile: **Quick** for a first look, **Standard** (the usual choice), or **Deep** for a release you are about to publish.
+2. The **Audit settings** bar appears above the message box. Choose a profile: **Quick** for a first look, **Standard** (the usual choice), or **Deep** for a release you are about to publish. Turn on the **RC profile** as well when the target is a Delorun release candidate, so coverage starts from the threat model's boundaries rather than waiting for reconnaissance to find them.
 3. Set a budget if you want one: a number of agents the run may start. Left empty, the plugin proposes one from the size of the repository and says so in the start message.
 4. Choose when you want to hear from the run: not until the end, after it has read the code (the usual choice), or after every stage.
 5. Press **Start audit**. The bar writes a message into the message box saying what will be audited and with which settings. Read it, then send it.
