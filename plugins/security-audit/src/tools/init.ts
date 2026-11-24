@@ -24,6 +24,7 @@ import {
   coordinatingSession,
   coordinatorRun,
   ensureIgnoredRoot,
+  ignoreProblem,
   filesFor,
   inRun,
   listRuns,
@@ -163,6 +164,8 @@ export function registerInitTool(ctx: Context, config: Config): void {
         if (await files.stat(posix.join(target, input)) === undefined) throw new Error('input ' + JSON.stringify(input) + ' does not exist in this workspace')
       }
       await ensureIgnoredRoot(files, root)
+      const ignored = await ignoreProblem(files, target, root)
+      if (ignored !== undefined) throw new Error(ignored)
       const existingRun = await coordinatorRun(files, root, target, session.id)
       if (existingRun !== undefined) {
         const existing = await readState(files, existingRun)

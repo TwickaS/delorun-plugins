@@ -174,6 +174,58 @@ export async function ensureIgnoredRoot(files: AuditFiles, root: string): Promis
   if (current !== RUNS_IGNORE_TEXT) await files.write(ignore, RUNS_IGNORE_TEXT)
 }
 
+/**
+ * The repository rules that would keep a run out of version control, or the reason they would not.
+ *
+ * The skill requires the run directory to be ignored before any file is written into it, and a run holds reports of
+ * unfixed vulnerabilities. The runs root's own `.gitignore` is not enough on its own: a repository can re-include a
+ * path below an ignored directory with a later negation, and a nested repository can ignore nothing at all. So this
+ * reads the rules that apply to the runs root and refuses when any of them would let a run file be committed.
+ * @param files - file access.
+ * @param workspace - the workspace root, absolute.
+ * @param root - the runs root, absolute.
+ * @returns the problem to report, or `undefined` when version control ignores the runs root.
+ */
+export async function ignoreProblem(files: AuditFiles, workspace: string, root: string): Promise<string | undefined> {
+  const relative = posix.relative(workspace, root)
+  if (relative === '' || relative.startsWith('..') || posix.isAbsolute(relative)) {
+    return `the runs root ${root} is not inside the workspace ${workspace}, so this plugin cannot establish that version control ignores it`
+  }
+  const segments = relative.split('/')
+  const rules: { readonly file: string, readonly text: string }[] = []
+  for (let depth = 0; depth <= segments.length; depth += 1) {
+    const directory = depth === 0 ? workspace : posix.join(workspace, ...segments.slice(0, depth))
+    const text = await files.read(posix.join(directory, '.gitignore'))
+    if (text !== undefined) rules.push({ file: posix.join(directory, '.gitignore'), text })
+  }
+  const problem = reincludeProblem(rules, segments)
+  if (problem !== undefined) return problem
+  return undefined
+}
+
+/**
+ * Whether any rule re-includes a path inside the runs root, which would let a run file be committed.
+ * @param rules - the `.gitignore` files that apply, outermost first.
+ * @param segments - the runs root's path below the workspace, one entry per directory.
+ * @returns the problem to report, or `undefined` when nothing re-includes a run file.
+ */
+function reincludeProblem(rules: readonly { readonly file: string, readonly text: string }[], segments: readonly string[]): string | undefined {
+  for (const rule of rules) {
+    for (const line of rule.text.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed === '' || trimmed.startsWith('#')) continue
+      if (!trimmed.startsWith('!')) continue
+      const target = trimmed.slice(1).replace(/^\/+/, '').replace(/\/+$/, '')
+      if (target === '') continue
+      const first = target.split('/')[0] ?? ''
+      if (segments.includes(first) || target.startsWith(segments.join('/'))) {
+        return `${rule.file} re-includes "${trimmed}" below the runs root, so a run file could be committed. Remove that rule, or move the run outside the repository.`
+      }
+    }
+  }
+  return undefined
+}
+
 const locks = new Map<string, Promise<void>>()
 
 /**
