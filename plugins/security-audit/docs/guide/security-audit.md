@@ -25,7 +25,8 @@ A security audit looks for places where the code lets something happen that its 
 2. The **Audit settings** bar appears above the message box. Choose a profile: **Quick** for a first look, **Standard** (the usual choice), or **Deep** for a release you are about to publish. Turn on the **RC profile** as well when the target is a Delorun release candidate, so coverage starts from the threat model's boundaries rather than waiting for reconnaissance to find them.
 3. Set a budget if you want one: a number of agents the run may start. Left empty, the plugin proposes one from the size of the repository and says so in the start message.
 4. Choose when you want to hear from the run: not until the end, after it has read the code (the usual choice), or after every stage.
-5. Press **Start audit**. The bar writes a message into the message box saying what will be audited and with which settings. Read it, then send it.
+5. Choose a model for any role that should not use this chat's model. Open **Models**, then **All roles** to set every role at once, or one role's own row to give it a model and a reasoning effort. **Use this chat's model** clears them all again. Every role starts on this chat's model, so this step is optional.
+6. Press **Start audit**. The bar writes a message into the message box saying what will be audited, with which settings, and which model and effort each role will run on. Read it, then send it.
 
 The run then works through six stages: reading the code, hunting along the coverage plan, validating candidates, writing its findings, checking its own records again, and writing the report. How long it takes depends on the profile and the budget, not on the size of the repository alone.
 
@@ -59,6 +60,7 @@ The report never goes into a repository with a public remote, because it describ
 - If the budget runs out mid-run, then the run stops and says so, and the report names the units and candidates it could not finish — raise the budget or narrow the scope with a list of paths.
 - If you asked for check-ins after every stage, then each stage ends with a message and a question — answer it to continue; the run waits for you.
 - If a turn is already running, then the bar hides **Start audit**, so that one audit starts one run — wait for the turn, or stop it.
+- If the **Models** menu is empty, then the Host has no model catalogue loaded yet, or no provider is signed in — the menu says so, and every role uses this chat's model until one is available.
 - If the sidebar pane is empty, then no run folder exists in that workspace yet, or the run wrote to another workspace — check which workspace the chat is in.
 
 </details>
@@ -68,7 +70,7 @@ The report never goes into a repository with a public remote, because it describ
 
 - **Audit a Delorun release candidate.** Turn on the RC profile in the Audit settings bar. Coverage then starts from one unit for each boundary in [Delorun's threat model](../../security/threat-model.md), so nothing the project claims to protect is left out of the first wave.
 - **Audit only part of a repository.** Name a list of paths in the start message. The run seeds units only for those paths, records the rest as out of scope, and presents itself as partial coverage.
-- **Choose a model per role.** Hunters read a lot of code; verifiers read a little and must be strict. A cheaper model for hunters and a stronger one for verifiers and critics is a legitimate mix, and the bar sets each one.
+- **Choose a model per role.** Hunters read a lot of code; verifiers read a little and must be strict. A cheaper model for hunters and a stronger one for verifiers and critics is a legitimate mix, and the bar sets each one, with its own reasoning effort. Every role starts on this chat's model, so nothing changes unless you choose it.
 - **Audit again after changes.** A second run in the same workspace reads the prior ledger: a confirmed finding whose source is unchanged is carried forward and re-verified, changed source becomes new work, and nothing is assumed covered because it was covered before.
 - **Keep the report out of the repository.** The private export writes the three report files to a folder you name, outside the repository, so a public repository never receives a page describing its own unfixed problems.
 
@@ -87,5 +89,7 @@ The report never goes into a repository with a public remote, because it describ
 ## For the technically curious
 
 The run directory is `<workspace>/.security-audit/run-<N>/`. The chat's own session is the coordinator and the only writer of the shared files; each role is a delegated agent whose session working directory is its own `<run>/agents/<id>/scratch/`, so the sandbox gives it write isolation with stock tools and no custom command wrapper. A role's structured result is enforced by the harness's `outputSchema` as well as by its prompt. The budget is a count of agent invocations, and the gate that reserves critics and verifiers runs before reconnaissance.
+
+A role's model and reasoning effort reach its child as the subagent start's own options, so a role runs on exactly the route the start message named. The four role names are one list that the settings bar, the start message, `audit_init`'s validator and the delegation layer all read, so a choice the bar offers is a choice the run accepts.
 
 The skill is vendored complete in `skill/`, byte-identical to upstream at commit `c1c8a8c`, with a `NOTICE.md` that names the commit and the licence and `ADAPTER.md` that states, for each of the skill's five execution-safety controls, what Delorun enforces and what it does not.

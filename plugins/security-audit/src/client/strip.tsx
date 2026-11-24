@@ -23,7 +23,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ModelProviderGroup } from '@deepseek-ai/dsh-api-remotes/client'
 import { NS, pluralKey } from './locales.ts'
 import type { ModelCatalogState } from './models.ts'
-import { MODELED_ROLES, buildStartMessage, type AuditProfile, type CheckIn, type ModeledRole, type RoleModel } from './start-message.ts'
+import { REASONING_EFFORTS } from '../roles.ts'
+import {
+  MODELED_ROLES, buildStartMessage, effortName, roleName,
+  type AuditProfile, type CheckIn, type ModeledRole, type ReasoningEffort, type RoleModel,
+} from './start-message.ts'
 
 /** The preset id the strip belongs to, as the package's patch declares it. */
 export const SECURITY_AUDIT_PRESET = 'security-audit'
@@ -96,54 +100,103 @@ function ChipMenu({ name, value, label, items, selectedId, onSelect }: {
   )
 }
 
-/** One role's model choice, as the menu builds and reads it. */
-interface ModelChoice {
-  readonly role: ModeledRole
-  /** The route chosen, or `undefined` for this chat's model. */
-  readonly route: RoleModel | undefined
+/** What choosing one row of the model menu does. */
+type ModelAction =
+  /** Give one role a route, or clear it with `undefined`. */
+  | { readonly kind: 'role'; readonly role: ModeledRole; readonly route: RoleModel | undefined }
+  /** Give one role a reasoning effort, or clear it with `undefined`. */
+  | { readonly kind: 'effort'; readonly role: ModeledRole; readonly effort: ReasoningEffort | undefined }
+  /** Give every role the same model, keeping each role's own effort. */
+  | { readonly kind: 'all'; readonly route: RoleModel }
+  /** Clear every role's own choice, so all of them use this chat's model. */
+  | { readonly kind: 'clear' }
+
+/**
+ * The model rows of one menu, grouped by provider, with the chosen one ticked.
+ * @param groups - the Host model catalogue.
+ * @param idOf - the row id for one provider and model.
+ * @param chosen - the route the menu is showing as chosen, when one is.
+ * @returns the rows, and the route each row id stands for.
+ */
+function modelRows(
+  groups: readonly ModelProviderGroup[],
+  idOf: (provider: string, model: string) => string,
+  chosen: RoleModel | undefined,
+): { rows: MenuEntry[]; routes: [string, RoleModel][] } {
+  const rows: MenuEntry[] = []
+  const routes: [string, RoleModel][] = []
+  const check = <IconCheckOutlineRegular size={12} />
+  for (const group of groups) {
+    if (groups.length > 1) rows.push({ type: 'label', id: idOf(group.id, '') + 'label', text: group.name })
+    for (const model of group.models) {
+      const id = idOf(group.id, model.id)
+      const selected = chosen?.provider === group.id && chosen.model === model.id
+      rows.push({ id, label: model.name, ...selected ? { icon: check } : {} })
+      routes.push([id, { provider: group.id, model: model.id, label: model.name }])
+    }
+  }
+  return { rows, routes }
 }
 
 /**
- * Build the per-role model menu, with the selection each role carries.
+ * Build the model menu: one row that sets every role at once, one that clears
+ * them all, then one row per role whose submenu holds its model and its
+ * reasoning effort.
  * @param groups - the Host model catalogue, grouped by provider.
  * @param models - the role routes chosen so far.
  * @param t - the translate seat.
- * @returns the menu's parent rows and the map its ids resolve through.
+ * @returns the menu's rows and the action each row id carries.
  */
 function modelMenu(
   groups: readonly ModelProviderGroup[],
   models: Partial<Record<ModeledRole, RoleModel>>,
   t: Translate,
-): { items: MenuEntry[]; choices: Map<string, ModelChoice> } {
-  const choices = new Map<string, ModelChoice>()
-  const items: MenuEntry[] = MODELED_ROLES.map(role => {
-    const roleName = {
-      recon: t('strip.role.recon'),
-      hunter: t('strip.role.hunter'),
-      verifier: t('strip.role.verifier'),
-      critic: t('strip.role.critic'),
-    }[role]
+): { items: MenuEntry[]; actions: Map<string, ModelAction> } {
+  const actions = new Map<string, ModelAction>()
+  const check = <IconCheckOutlineRegular size={12} />
+  const items: MenuEntry[] = []
+  if (groups.length === 0) {
+    items.push({ type: 'label', id: 'empty', text: t('strip.models.empty') })
+  } else {
+    const all = modelRows(groups, (provider, model) => `all::${provider}::${model}`, undefined)
+    for (const [id, route] of all.routes) actions.set(id, { kind: 'all', route })
+    items.push({ id: 'all', label: t('strip.models.all'), submenu: all.rows })
+    items.push({ type: 'separator', id: 'all::separator' })
+  }
+  actions.set('clear', { kind: 'clear' })
+  items.push({ id: 'clear', label: t('strip.models.clear') })
+  items.push({ type: 'separator', id: 'roles::separator' })
+  for (const role of MODELED_ROLES) {
     const chosen = models[role]
     const chatId = `${role}::chat`
-    choices.set(chatId, { role, route: undefined })
-    const check = <IconCheckOutlineRegular size={12} />
-    const rows: MenuEntry[] = [{
-      id: chatId,
-      label: t('strip.models.chat'),
-      ...chosen === undefined ? { icon: check } : {},
-    }]
-    for (const group of groups) {
-      if (groups.length > 1) rows.push({ type: 'label', id: `${role}::${group.id}::label`, text: group.name })
-      for (const model of group.models) {
-        const id = `${role}::${group.id}::${model.id}`
-        choices.set(id, { role, route: { provider: group.id, model: model.id, label: model.name } })
-        const selected = chosen !== undefined && chosen.provider === group.id && chosen.model === model.id
-        rows.push({ id, label: model.name, ...selected ? { icon: check } : {} })
-      }
+    actions.set(chatId, { kind: 'role', role, route: undefined })
+    // A role given only an effort still runs this chat's model, so that row stays ticked.
+    const usesChatModel = chosen?.provider === undefined || chosen.model === undefined
+    // The menu renders two levels, so a role's effort choices are a labelled
+    // group inside its own submenu rather than a third level.
+    const rows: MenuEntry[] = [
+      { id: chatId, label: t('strip.models.chat'), ...usesChatModel ? { icon: check } : {} },
+      { type: 'separator', id: `${role}::effort::separator` },
+      { type: 'label', id: `${role}::effort::label`, text: t('strip.models.effortLabel') },
+    ]
+    const chatEffortId = `${role}::effort::chat`
+    rows.push({ id: chatEffortId, label: t('strip.models.effort.chat'), ...chosen?.effort === undefined ? { icon: check } : {} })
+    actions.set(chatEffortId, { kind: 'effort', role, effort: undefined })
+    for (const effort of REASONING_EFFORTS) {
+      const id = `${role}::effort::${effort}`
+      rows.push({ id, label: effortName(t, effort), ...chosen?.effort === effort ? { icon: check } : {} })
+      actions.set(id, { kind: 'effort', role, effort })
     }
-    return { id: `role::${role}`, label: roleName, submenu: rows }
-  })
-  return { items, choices }
+    if (groups.length > 0) {
+      rows.push({ type: 'separator', id: `${role}::model::separator` })
+      rows.push({ type: 'label', id: `${role}::model::label`, text: t('strip.models.modelLabel') })
+      const roleModels = modelRows(groups, (provider, model) => `${role}::${provider}::${model}`, chosen)
+      for (const [id, route] of roleModels.routes) actions.set(id, { kind: 'role', role, route })
+      rows.push(...roleModels.rows)
+    }
+    items.push({ id: `role::${role}`, label: roleName(t, role), submenu: rows })
+  }
+  return { items, actions }
 }
 
 /**
@@ -172,13 +225,42 @@ export function SecurityAuditStrip(props: SecurityAuditStripProps): ReactNode {
     setWritten(inputActions.insertText(text, inputActions.captureInsertion()))
   }
   const chooseModel = (id: string): void => {
-    const choice = menu.choices.get(id)
-    if (choice === undefined) return
+    const action = menu.actions.get(id)
+    if (action === undefined) return
     setModels(current => {
-      const next = { ...current }
-      if (choice.route === undefined) delete next[choice.role]
-      else next[choice.role] = choice.route
-      return next
+      switch (action.kind) {
+        case 'clear':
+          return {}
+        case 'all': {
+          // Every role takes the model, and keeps whatever effort it already had.
+          const next: Partial<Record<ModeledRole, RoleModel>> = {}
+          for (const role of MODELED_ROLES) {
+            const effort = current[role]?.effort
+            next[role] = effort === undefined ? action.route : { ...action.route, effort }
+          }
+          return next
+        }
+        case 'role': {
+          const next = { ...current }
+          if (action.route === undefined) delete next[action.role]
+          else next[action.role] = action.route
+          return next
+        }
+        case 'effort': {
+          // An effort stands on its own: a role given only an effort runs this
+          // chat's model at that effort, so the route keeps whichever fields it had.
+          const next = { ...current }
+          const route = next[action.role]
+          const { effort: _dropped, ...rest } = route ?? {}
+          if (action.effort === undefined) {
+            if (rest.provider === undefined && rest.model === undefined) delete next[action.role]
+            else next[action.role] = rest
+          } else {
+            next[action.role] = { ...rest, effort: action.effort }
+          }
+          return next
+        }
+      }
     })
   }
   const chosenRoles = MODELED_ROLES.filter(role => models[role] !== undefined).length

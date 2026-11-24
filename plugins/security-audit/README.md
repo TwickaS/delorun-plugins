@@ -14,6 +14,7 @@ The plugin carries two profiles. The **general** profile derives its coverage fr
 ## Contents
 
 - [Install and start](#install-and-start)
+- [Choosing a model per role](#choosing-a-model-per-role)
 - [The intake](#the-intake)
 - [The six phases](#the-six-phases)
 - [What a run writes](#what-a-run-writes)
@@ -31,12 +32,46 @@ delorun plugin add delorun-plugin-security-audit
 
 Then open a chat, choose **Security audit** in the mode list, and pick the workspace that holds the repository to audit. The **Audit settings** bar appears above the message box. Set the profile or turn on the RC profile, the budget, the check-ins and any per-role models, then press **Start audit**: the bar writes a start message into the message box. Read it and send it. The bar never sends a message itself, and it hides **Start audit** while a turn runs so that one audit starts one run.
 
+Every role defaults to this chat's model and effort, and the bar asks rather than assumes. The **Models** menu lists each role with its own model and its own reasoning effort, one **All roles** entry that sets every role at once, and one **Use this chat's model** entry that clears them all. The start message states each role's effective route, so what the run will spend is visible before you send it. A deployment can set defaults for any role in the plugin's configuration, and a run's own choice wins over them field by field.
+
 Four conditions must hold before a run starts. The plugin checks each one and refuses with a message naming the fix:
 
 - The target repository's version control ignores the run directory `<workspace>/.security-audit/`. Add `.security-audit/` to the repository's `.gitignore` when it does not.
 - The audit workspace's [network setting](https://github.com/TwickaS/delorun/blob/main/delorun/docs/guide/safety-and-updates/prompt-injection.md#the-network-setting) is **Off**. A run reads the target and needs no network; a setting that admits one would let a target-controlled program send data out, so the plugin refuses rather than assume. Change it in Settings → Safety → Network at the computer.
 - The sandbox can express the network rule. Only bubblewrap does, so on Landlock, Seatbelt and Windows a workspace set to Off refuses to run commands. A run on such a machine reports `needs_validation` for every check that needed local execution, and local execution is not attempted.
 - The workspace's permission preset is **Workspace Write** or **Read Only**, not full access. A command under full access runs outside the sandbox, so the skill's execution-safety bar does not hold for it.
+
+## Choosing a model per role
+
+A run delegates its work to four kinds of agent, and each can run on a different model and a different reasoning effort:
+
+| Role | What it does | Why you might give it its own model |
+| --- | --- | --- |
+| reconnaissance | Four agents read the target in parallel and return source facts | It reads the most code, so a cheaper model with a large context is often enough |
+| hunters | They hunt one coverage unit each and must show a bounded check | It reads a lot and must be careful, so this is where a stronger model pays |
+| verifiers | They try to refute one candidate each, and never hunted it | It reads little and must be strict; a strong model at high effort is the usual choice |
+| critics | They judge coverage after each wave and before the run calls itself complete | It reads the ledger and the results, not the target |
+
+Nothing is chosen for you. Every role starts on this chat's model and this chat's effort, and the **Models** menu in the Audit settings bar is where you change that:
+
+- **All roles** sets one model for every role at once, keeping any effort a role already had.
+- **Use this chat's model** clears every role's own choice, so all four go back to the chat's route.
+- Each role's own row opens its model list, read from the models the Host has loaded, and its **Reasoning effort** row offers **off**, **low**, **high** and **max**, or this chat's effort when unset.
+
+The bar shows how many roles have a choice of their own, and the start message states each role's effective route — provider, model and effort, or "this chat's model" — so what the run will spend is visible before you send it. The run records the same routes in `run-metadata.json`, and each agent's entry in `state.json` records the route it actually ran on.
+
+A deployment can set defaults for any role in the plugin's configuration, which is what a team that always wants a strong verifier should do:
+
+```yaml
+- id: security-audit
+  config:
+    mount: agent
+    models:
+      hunter: { provider: deepseek, model: deepseek-v4.1-flash, reasoningEffort: low }
+      verifier: { provider: deepseek, model: deepseek-v4.1-pro, reasoningEffort: high }
+```
+
+A run's own choice wins over a deployment default field by field: a run that sets only a role's effort keeps the deployment's model for that role, and a field neither sets inherits the chat's. The role names are the four in the table above; a configuration or an intake that names any other role is refused with the list of the ones it accepts.
 
 ## The intake
 
@@ -48,7 +83,7 @@ The start message carries the intake. Each setting is also a field in the bar.
 | Profile | `quick`, `standard`, `deep` | Breadth and redundancy, never the evidence bar. `quick` coarsens coverage units to surface × boundary × attack class and runs one hunter wave and one critic pass. `standard` runs the workflow as written. `deep` splits units per subsystem and lifecycle mode and re-passes units a prior run covered from unchanged source. |
 | Budget | a number of agent invocations, or unset | The most agents the run may start. Unset means no limit. When the person sets none, the plugin proposes one from the target's size and states the proposal in the start message. |
 | Check-ins | `straight_through`, `after_recon`, `every_stage` | When the coordinator reports to the person and waits: never, after reconnaissance (the default), or after each stage. |
-| Role models | one model per role, or unset | Which model each role runs. Unset inherits the chat's model. |
+| Role models | one model and one reasoning effort per role, or unset | Which model each role runs, and at what effort. Unset inherits the chat's model and effort. **All roles** sets every role at once, and **Use this chat's model** clears them all. |
 | RC profile | on or off | Whether coverage starts from the threat model's boundaries instead of reconnaissance. |
 
 The budget gate runs before any reconnaissance agent starts. It reserves the four reconnaissance calls, the critic calls the profile requires and at least one verifier call, and it launches nothing when the budget cannot fund them: the run records `run_status: "incomplete"` with the skill's reason `budget_cannot_fund_reconnaissance_and_reserves` and says that no audit pass ran. A set budget is never exceeded silently. An exhausted budget ends the run as `incomplete` with an exact reason, and the report states which units and candidates the budget left unresolved.

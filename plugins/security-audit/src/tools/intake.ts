@@ -11,7 +11,7 @@ import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxEnforcement, SandboxMode, SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 import type { RoleModelOverrides } from '../config.ts'
-import { MODELED_ROLES } from '../config.ts'
+import { MODELED_ROLES, REASONING_EFFORTS, type ModeledRole, type ReasoningEffort } from '../roles.ts'
 import { ledgerValidator } from '../skill.ts'
 import { type AuditFiles, now } from '../store.ts'
 import type { RoleModels, RunLocation, SourceRef } from '../types.ts'
@@ -143,25 +143,44 @@ export function estimatedUnits(files: number): number {
   return Math.max(4, Math.ceil(files / 12))
 }
 
+/** The role names, as the refusal messages list them. */
+const ROLE_NAMES = MODELED_ROLES.join(', ')
+
+/** The effort names, as the refusal messages list them. */
+const EFFORT_NAMES = REASONING_EFFORTS.join(', ')
+
 /**
- * Read the per-role model routes the person chose at intake.
+ * Read the per-role model routes the person chose at intake. The roles are the
+ * ones the composer strip offers, from the one list both halves read, so a choice
+ * the strip writes is a choice this accepts.
+ *
+ * A route may set a provider and model, a reasoning effort, or both. A field it
+ * leaves out inherits the chat's, so a role given only an effort runs the chat's
+ * model at that effort.
  * @param value - the tool argument, keyed by role.
  * @returns the routes.
- * @throws {Error} for an unknown role or an incomplete route.
+ * @throws {Error} for an unknown role, an empty route, a provider without a model or an unknown effort.
  */
 export function roleModels(value: unknown): RoleModelOverrides {
   if (value === undefined) return {}
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('models must be an object keyed by recon, hunter, verifier or critic')
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('models must be an object keyed by ' + ROLE_NAMES)
   const result: RoleModelOverrides = {}
   for (const [role, raw] of Object.entries(value)) {
-    if (!MODELED_ROLES.includes(role as (typeof MODELED_ROLES)[number])) throw new Error('models names unknown role ' + role + '; use recon, hunter, verifier or critic')
+    if (!MODELED_ROLES.includes(role as ModeledRole)) throw new Error('models names unknown role ' + role + '; use ' + ROLE_NAMES)
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new Error('models.' + role + ' must be an object')
     const provider = Reflect.get(raw, 'provider')
     const model = Reflect.get(raw, 'model')
     const reasoningEffort = Reflect.get(raw, 'reasoningEffort')
-    if (typeof provider !== 'string' || provider === '' || typeof model !== 'string' || model === '') throw new Error('models.' + role + ' needs a provider and a model')
-    if (reasoningEffort !== undefined && (typeof reasoningEffort !== 'string' || reasoningEffort === '')) throw new Error('models.' + role + '.reasoningEffort must be a non-empty string when set')
-    result[role as (typeof MODELED_ROLES)[number]] = { provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } }
+    const hasProvider = provider !== undefined && provider !== ''
+    const hasModel = model !== undefined && model !== ''
+    if (hasProvider !== hasModel) throw new Error('models.' + role + ' needs both a provider and a model, or neither to inherit the chat\'s')
+    if (hasProvider && (typeof provider !== 'string' || typeof model !== 'string')) throw new Error('models.' + role + ' needs a provider and a model as strings')
+    if (reasoningEffort !== undefined && !REASONING_EFFORTS.includes(reasoningEffort as ReasoningEffort)) throw new Error('models.' + role + '.reasoningEffort must be one of ' + EFFORT_NAMES + ' when set')
+    if (!hasProvider && reasoningEffort === undefined) throw new Error('models.' + role + ' sets nothing; omit the role to inherit the chat\'s model')
+    result[role as ModeledRole] = {
+      ...hasProvider ? { provider: provider as string, model: model as string } : {},
+      ...reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort as ReasoningEffort },
+    }
   }
   return result
 }
