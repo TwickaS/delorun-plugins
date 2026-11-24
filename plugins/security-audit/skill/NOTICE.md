@@ -7,7 +7,7 @@ This directory vendors the `security-audit` skill from Cloudflare's repository, 
 - **Commit:** `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`
 - **Commit date:** 2026-09-14
 - **Commit subject:** "Clarify guidance and full audit modes"
-- **Vendored:** 2026-11-24, from a fresh clone of that commit. The clone's `git log` shows this commit as the repository's newest, sixteen commits after the initial one.
+- **Vendored:** 2026-11-24, from a fresh clone of that commit. The clone's `git log` shows this commit as the repository's newest, out of fourteen commits in total.
 
 ## What is byte-identical
 
@@ -38,7 +38,7 @@ Every file in this table is byte-identical to the file of the same name in `skil
 
 ## Files that are not upstream
 
-Three files in this directory do not come from `skills/security-audit/`, and nothing in the table above depends on them:
+Three files in this directory do not come from `skills/security-audit/`, and none of the 20 files above depends on them:
 
 - `LICENSE` holds Cloudflare's repository-root `LICENSE`, copied unchanged. The skill directory upstream carries no licence file of its own; the repository root states the MIT licence for everything in it.
 - `NOTICE.md` is this file.
