@@ -2,7 +2,7 @@
  * `audit_candidates`: read the candidate store and its verification history.
  * The coordinator uses it to choose validation work and to write the report; a
  * candidate that is not final-verified is never a finding.
- * @module @delorun/plugin-security-audit/tools/candidates
+ * @module delorun-plugin-security-audit/tools/candidates
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

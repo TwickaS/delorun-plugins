@@ -14,7 +14,7 @@ The words this plugin's documentation, interface text and prompts use, one term 
 
 ## The feature
 
-- **security audit** — a run of Cloudflare's security-audit skill over a repository, which reads the code along its trust boundaries and reports only what a bounded local check supports. Technical note: `@delorun/plugin-security-audit`; the skill is vendored in `skill/`. <a id="security-audit"></a>
+- **security audit** — a run of Cloudflare's security-audit skill over a repository, which reads the code along its trust boundaries and reports only what a bounded local check supports. Technical note: `delorun-plugin-security-audit`; the skill is vendored in `skill/`. <a id="security-audit"></a>
 - **audit profile** — how broad a run is: **Quick** for a first look, **Standard** as the workflow is written, **Deep** for a release candidate. Breadth and redundancy change with it; the evidence bar does not. Technical note: the `profile` field, `quick`, `standard` or `deep`. <a id="audit-profile"></a>
 - **RC profile** — the choice that seeds coverage from one unit for each boundary in [Delorun's threat model](https://github.com/TwickaS/delorun/blob/main/delorun/docs/security/threat-model.md), so a release candidate is audited against everything Delorun claims to protect. <a id="rc-profile"></a>
 - **audit budget** — the most agents a run may start, counted in agent invocations across every stage. A run that reaches it stops and calls itself incomplete rather than spend more. <a id="audit-budget"></a>

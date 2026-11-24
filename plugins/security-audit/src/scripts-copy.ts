@@ -12,7 +12,7 @@
  * A copy is the role's cwd and its only writable root. It is disposable: the
  * role's artifacts are promoted out of it and the copy is removed when the role
  * finishes.
- * @module @delorun/plugin-security-audit/scripts-copy
+ * @module delorun-plugin-security-audit/scripts-copy
  */
 import { spawn } from 'node:child_process'
 import { lstat, mkdir, readdir, rm, statfs } from 'node:fs/promises'

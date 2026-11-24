@@ -4,7 +4,7 @@
  * or two verifier assignments (SKILL.md, Cost budget). Every function here is
  * pure, so the intake, the delegation gate and the pane share one accounting and
  * a set budget is never exceeded silently.
- * @module @delorun/plugin-security-audit/budget
+ * @module delorun-plugin-security-audit/budget
  */
 import type { AuditProfile } from './types.ts'
 

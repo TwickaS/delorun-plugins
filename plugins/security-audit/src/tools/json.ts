@@ -3,7 +3,7 @@
  * authority on what a value holds, and its render function reads only what the
  * schema declares; these helpers carry a domain object into that plain shape
  * without a cast to `unknown`.
- * @module @delorun/plugin-security-audit/tools/json
+ * @module delorun-plugin-security-audit/tools/json
  */
 
 /** A lossless JSON value, as a tool answer may carry it. */

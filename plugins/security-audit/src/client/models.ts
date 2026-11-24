@@ -2,7 +2,7 @@
  * The model catalogue the strip's per-role menus read. The Host answers it from
  * the adapters it has loaded, so the catalogue is read on demand, refreshed when
  * an adapter changes, and dropped when the connection is replaced.
- * @module @delorun/plugin-security-audit/client/models
+ * @module delorun-plugin-security-audit/client/models
  */
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'

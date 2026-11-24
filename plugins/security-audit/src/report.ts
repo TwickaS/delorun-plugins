@@ -3,7 +3,7 @@
  * and the completion gate. `findings.json` is derived only from independently
  * verified records; a report is written only from that file, and a
  * machine-readable fingerprint footer keeps prose and JSON aligned.
- * @module @delorun/plugin-security-audit/report
+ * @module delorun-plugin-security-audit/report
  */
 import type { CandidateEntry, HarnessState, LedgerUnit, ReportDocument, RunMetadata, WorkCopy } from './types.ts'
 import { NESTED_HARNESS_CAP } from './scripts-copy.ts'

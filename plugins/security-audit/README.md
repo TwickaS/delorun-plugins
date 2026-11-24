@@ -3,7 +3,7 @@ description: "The Security audit plugin: what it does, how to install and start 
 kind: "package-reference"
 ---
 
-# @delorun/plugin-security-audit
+# delorun-plugin-security-audit
 
 ## Summary
 
@@ -26,7 +26,7 @@ The plugin carries two profiles. The **general** profile derives its coverage fr
 Install the plugin and turn it on at the computer that runs Delorun:
 
 ```sh
-delorun plugin add @delorun/plugin-security-audit
+delorun plugin add delorun-plugin-security-audit
 ```
 
 Then open a chat, choose **Security audit** in the mode list, and pick the workspace that holds the repository to audit. The **Audit settings** bar appears above the message box. Set the profile or turn on the RC profile, the budget, the check-ins and any per-role models, then press **Start audit**: the bar writes a start message into the message box. Read it and send it. The bar never sends a message itself, and it hides **Start audit** while a turn runs so that one audit starts one run.

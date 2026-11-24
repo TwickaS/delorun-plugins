@@ -3,7 +3,7 @@
  * every later brief carries. RECONNAISSANCE.md caps it at about 1,000 words and
  * keeps assignment detail in the ledger, so this tool refuses a summary past the
  * cap rather than letting one grow into a second ledger.
- * @module @delorun/plugin-security-audit/tools/architecture
+ * @module delorun-plugin-security-audit/tools/architecture
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

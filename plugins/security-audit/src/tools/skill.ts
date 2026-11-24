@@ -1,7 +1,7 @@
 /**
  * `audit_skill`: the coordinator's read access to the vendored skill pack, so a
  * block reaches a brief by exact text rather than from the model's memory.
- * @module @delorun/plugin-security-audit/tools/skill
+ * @module delorun-plugin-security-audit/tools/skill
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'

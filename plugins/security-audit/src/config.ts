@@ -5,7 +5,7 @@
  * with `mount: 'agent'`, where it registers the audit tools and the
  * coordinator prompt. `mount` has no default so neither row can register the
  * wrong half by omission.
- * @module @delorun/plugin-security-audit/config
+ * @module delorun-plugin-security-audit/config
  */
 import z from '@deepseek-ai/schemastery'
 import type { ModelRoute } from './types.ts'

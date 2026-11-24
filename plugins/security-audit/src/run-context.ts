@@ -3,7 +3,7 @@
  * chat's target, run, file accessor, ledger, architecture and state. Every tool
  * resolves these the same way, so a chat that resumes finds the run its log
  * names.
- * @module @delorun/plugin-security-audit/run-context
+ * @module delorun-plugin-security-audit/run-context
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

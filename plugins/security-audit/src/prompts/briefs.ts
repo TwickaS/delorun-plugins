@@ -4,7 +4,7 @@
  * assembled here; a child never receives a prose summary that omits the method
  * or the isolation rules. Every block reference resolves before a child starts,
  * so a stale ledger fails without spending an invocation.
- * @module @delorun/plugin-security-audit/prompts/briefs
+ * @module delorun-plugin-security-audit/prompts/briefs
  */
 import type { LedgerUnit } from '../ledger.ts'
 import { fencedBlockAfter, schemaBranch, sectionText, skillBlock } from '../skill.ts'

@@ -4,7 +4,7 @@
  * and refuses to start when a control the skill requires is missing, naming the
  * setting to change rather than assuming it. Every check it makes is recorded in
  * `run-metadata.json`, so the run states its own boundary.
- * @module @delorun/plugin-security-audit/tools/init
+ * @module delorun-plugin-security-audit/tools/init
  */
 import { posix } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'

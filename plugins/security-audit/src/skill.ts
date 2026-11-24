@@ -4,7 +4,7 @@
  * blocks the skill tells the coordinator to copy verbatim, the report schema's
  * verdict branches, and the skill's own two validators. Every extraction
  * returns the pack's exact text, read from `skill/` beside the built module.
- * @module @delorun/plugin-security-audit/skill
+ * @module delorun-plugin-security-audit/skill
  */
 import { createRequire } from 'node:module'
 import { readFileSync, readdirSync } from 'node:fs'

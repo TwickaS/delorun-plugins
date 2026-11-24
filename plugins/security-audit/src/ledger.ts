@@ -7,7 +7,7 @@
  *
  * The ledger's vocabulary lives in `types.ts`; this module re-exports it so a
  * caller of a ledger operation imports one module.
- * @module @delorun/plugin-security-audit/ledger
+ * @module delorun-plugin-security-audit/ledger
  */
 import { ledgerValidator, skillBlock, SkillReferenceError } from './skill.ts'
 import type { HunterUnitResult, LedgerCheck, LedgerUnit, StatusCounts, UnitSeed, UnitStatus } from './types.ts'

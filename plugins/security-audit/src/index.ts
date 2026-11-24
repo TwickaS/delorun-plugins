@@ -9,7 +9,7 @@
  * audit tool or the coordinator prompt into every other chat. Inside the
  * Security audit preset it is `mount: 'agent'`, where it registers the audit
  * tools and the coordinator prompt for that preset's agent alone.
- * @module @delorun/plugin-security-audit
+ * @module delorun-plugin-security-audit
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -23,7 +23,7 @@ export { Config } from './config.ts'
 export type { Config as SecurityAuditConfig, Mount, RoleModelOverride } from './config.ts'
 
 /** The plugin's name, which the studio loads `lib/client.js` under. */
-export const name = '@delorun/plugin-security-audit'
+export const name = 'delorun-plugin-security-audit'
 
 /** The services every mounted row needs; the sandbox services are looked up at use. */
 export const inject = ['tools', 'fs', 'systemPrompt']

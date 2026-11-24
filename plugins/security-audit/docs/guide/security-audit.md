@@ -14,7 +14,7 @@ A security audit looks for places where the code lets something happen that its 
 
 ## What you need first
 
-- The plugin, installed with `delorun plugin add @delorun/plugin-security-audit` and turned on in Settings → Plugins. A plugin installed from a folder waits in Changes for you to approve it.
+- The plugin, installed with `delorun plugin add delorun-plugin-security-audit` and turned on in Settings → Plugins. A plugin installed from a folder waits in Changes for you to approve it.
 - The repository's version control ignoring `.security-audit/`, which is where the run writes. Add that line to `.gitignore` if it is missing.
 - The workspace's network set to **Off** in Settings → Safety → Network. The audit reads the code and runs small local checks; it needs no network, and a setting that allows one would let a checked program send your data out.
 - A Linux machine with bubblewrap, which is what runs commands with no network at all. On other systems the audit still reads and reports, and marks every check that needs to run as needing validation.

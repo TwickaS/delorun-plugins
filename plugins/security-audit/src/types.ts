@@ -6,7 +6,7 @@
  * The ledger vocabulary follows Cloudflare's security-audit skill exactly (RECONNAISSANCE.md, Deterministic coverage
  * ledger): a unit's semantic fields, its status table, its canonical references and its archived attempts keep the
  * skill's names, so the skill's own validators accept what the plugin writes.
- * @module @delorun/plugin-security-audit/types
+ * @module delorun-plugin-security-audit/types
  */
 import type { SandboxEnforcement, SandboxMode, SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 

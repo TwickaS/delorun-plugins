@@ -4,7 +4,7 @@
  * package that implements the defence, the ordinary attack class the skill assigns and the paths a hunter starts
  * from, so an audit of a release candidate leaves out no boundary the project claims to protect. The seed is a
  * starting point: reconnaissance and the coverage critic add the combinations it does not name.
- * @module @delorun/plugin-security-audit/rc-profile
+ * @module delorun-plugin-security-audit/rc-profile
  */
 import type { UnitSeed } from './types.ts'
 

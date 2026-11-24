@@ -6,7 +6,7 @@
  * structured problem describing why.
  *
  * Observe-only. Nothing here starts, stops or steers a run.
- * @module @delorun/plugin-security-audit/client/controller
+ * @module delorun-plugin-security-audit/client/controller
  */
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceDirectoryListing, WorkspaceFileText, WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'

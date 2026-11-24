@@ -7,7 +7,7 @@
  *
  * Observe-only. The body reads the controller's snapshot and calls its
  * callbacks; it never starts, stops or steers a run.
- * @module @delorun/plugin-security-audit/client/pane
+ * @module delorun-plugin-security-audit/client/pane
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import {

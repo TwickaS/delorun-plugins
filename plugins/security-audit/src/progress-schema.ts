@@ -4,7 +4,7 @@
  * The pane and any other integration read this instead of scraping the ledger, so the shape is versioned and its
  * fields are documented in the README. It is derived: the coverage ledger stays the source of truth, and this file
  * carries no fact the ledger and the run metadata do not already hold.
- * @module @delorun/plugin-security-audit/progress-schema
+ * @module delorun-plugin-security-audit/progress-schema
  */
 
 /** The schema id and version this module writes. A reader refuses a version it does not know. */

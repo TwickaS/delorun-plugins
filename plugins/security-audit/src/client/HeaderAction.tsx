@@ -2,7 +2,7 @@
  * The session-header control that opens the pane. It only navigates: the tab type
  * is registered independently, so the same control reveals an already open
  * security-audit tab instead of opening a second one.
- * @module @delorun/plugin-security-audit/client/HeaderAction
+ * @module delorun-plugin-security-audit/client/HeaderAction
  */
 import type { ReactNode } from 'react'
 import { IconShieldOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'

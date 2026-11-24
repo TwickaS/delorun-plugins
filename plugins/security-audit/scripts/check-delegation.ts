@@ -9,7 +9,7 @@
  *
  * Run: cd ~/delorun/code && node --import tsx/esm \
  *        ../plugins/plugins/security-audit/scripts/check-delegation.ts
- * @module @delorun/plugin-security-audit/scripts/check-delegation
+ * @module delorun-plugin-security-audit/scripts/check-delegation
  */
 import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'

@@ -3,7 +3,7 @@
  * a schema-shaped record plus its independent verifier history; only the
  * coordinator writes this file, and only a record with a final independent
  * verification may enter `findings.json`.
- * @module @delorun/plugin-security-audit/candidates
+ * @module delorun-plugin-security-audit/candidates
  */
 import { type AuditFiles, type RunLocation, CANDIDATES_FILE, inRun, now } from './store.ts'
 import type { CandidateEntry, CandidateVerification } from './types.ts'

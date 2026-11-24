@@ -2,7 +2,7 @@
  * The prompt composer and result schemas for every delegated role. The
  * delegation tool imports one entry point so a brief and its enforced schema
  * always travel together.
- * @module @delorun/plugin-security-audit/prompts
+ * @module delorun-plugin-security-audit/prompts
  */
 export {
   MAX_ARTIFACT_BYTES,

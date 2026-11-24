@@ -5,7 +5,7 @@
  * the limits it has already accepted. These four layers point a role at that knowledge, so a finding is judged against
  * what Delorun claims to enforce rather than against a generic checklist, and so a deliberate decision is not reported
  * as a defect.
- * @module @delorun/plugin-security-audit/prompts/additions
+ * @module delorun-plugin-security-audit/prompts/additions
  */
 
 /** What a role can be told about the target beyond the skill's own text. */

@@ -3,7 +3,7 @@
  * records, validate both skill files, and state exactly what the three report
  * documents must account for. It never turns an unverified candidate into a
  * finding.
- * @module @delorun/plugin-security-audit/tools/finalize
+ * @module delorun-plugin-security-audit/tools/finalize
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

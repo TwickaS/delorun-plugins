@@ -1,7 +1,7 @@
 /**
  * The start message the composer strip writes, and the same message the pane's
  * empty state offers. One builder keeps the two surfaces saying the same thing.
- * @module @delorun/plugin-security-audit/client/start-message
+ * @module delorun-plugin-security-audit/client/start-message
  */
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { RUNS_DIRECTORY } from './runs.ts'

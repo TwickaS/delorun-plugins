@@ -10,7 +10,7 @@
  * Every file goes through `ctx.fs`, so a write carries the coordinating session's standing sandbox policy where the
  * filesystem confines. One lock per run serialises every read-modify-write of the run's bookkeeping, which is enough
  * because every session of one account runs in one harness process.
- * @module @delorun/plugin-security-audit/store
+ * @module delorun-plugin-security-audit/store
  */
 import { posix } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'

@@ -6,7 +6,7 @@
  *
  * Tool and file names (`audit_init`, `run-metadata.json`, the run directory)
  * stay verbatim inside the sentences that carry them.
- * @module @delorun/plugin-security-audit/client/locales
+ * @module delorun-plugin-security-audit/client/locales
  */
 
 /** The dictionary namespace this plugin owns. */

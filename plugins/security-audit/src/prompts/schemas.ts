@@ -4,7 +4,7 @@
  * full record rules, which that subset cannot express, run in the validation
  * gate before a result reaches shared state. The prompt carries the same
  * contract verbatim, so a child sees the rules and the tool enforces them.
- * @module @delorun/plugin-security-audit/prompts/schemas
+ * @module delorun-plugin-security-audit/prompts/schemas
  */
 import type { JsonSchemaNode, ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 

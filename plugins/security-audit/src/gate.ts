@@ -7,7 +7,7 @@
  * validator, and, for a hunter, the ledger the result would produce against
  * the skill's ledger validator. A refused result returns to the agent as a
  * tool error naming each problem, so it corrects the result before it ends.
- * @module @delorun/plugin-security-audit/gate
+ * @module delorun-plugin-security-audit/gate
  */
 import { applyHunterResult, type HunterUnitResult, type LedgerCheck, type LedgerUnit, validateLedger } from './ledger.ts'
 import { findingsValidator, ledgerValidator, skillBlock, SkillReferenceError, REPORT_SCHEMA } from './skill.ts'

@@ -2,7 +2,7 @@
  * `audit_ledger`: the deterministic coverage ledger as the coordinator operates
  * it. Every action writes through the skill's own ledger validator, so a
  * malformed or non-canonical ledger never reaches disk.
- * @module @delorun/plugin-security-audit/tools/ledger
+ * @module delorun-plugin-security-audit/tools/ledger
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

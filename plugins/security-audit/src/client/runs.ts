@@ -4,7 +4,7 @@
  * file boundary — a file the coordinator is still writing, or one that is
  * otherwise malformed, yields `undefined`, so the caller keeps its last good copy
  * and shows a quiet notice.
- * @module @delorun/plugin-security-audit/client/runs
+ * @module delorun-plugin-security-audit/client/runs
  */
 import type { WorkspaceDirectoryEntry } from '@deepseek-ai/dsh-api-workspace-files/types'
 

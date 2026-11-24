@@ -2,7 +2,7 @@
  * `audit_complete`: the terminal state. It marks a run complete only when the
  * three report documents, both skill validators and every candidate state
  * agree, and otherwise records the exact reason the run is incomplete.
- * @module @delorun/plugin-security-audit/tools/complete
+ * @module delorun-plugin-security-audit/tools/complete
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

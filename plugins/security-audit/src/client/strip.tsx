@@ -7,7 +7,7 @@
  * The strip appears in a chat whose preset is Security audit: the preset itself
  * is declared by the package's cordis.patch.yml, and this is the settings surface
  * that goes with it.
- * @module @delorun/plugin-security-audit/client/strip
+ * @module delorun-plugin-security-audit/client/strip
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {

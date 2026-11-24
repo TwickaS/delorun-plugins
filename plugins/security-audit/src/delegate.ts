@@ -16,7 +16,7 @@
  * target harness inside that copy, at most twice per run, under bwrap and its
  * own scratch HOME (`audit_harness`). The audit workspace's network setting
  * must be off; the gate refuses to start a role without it.
- * @module @delorun/plugin-security-audit/delegate
+ * @module delorun-plugin-security-audit/delegate
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { constants, existsSync } from 'node:fs'

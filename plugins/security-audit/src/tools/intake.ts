@@ -3,7 +3,7 @@
  * it needs: the confinement facts of a role cwd, the source revision, a bounded
  * size estimate and the per-role model routes. Each check either establishes a
  * fact the run records or refuses the run naming the setting to change.
- * @module @delorun/plugin-security-audit/tools/intake
+ * @module delorun-plugin-security-audit/tools/intake
  */
 import { execFile } from 'node:child_process'
 import { posix } from 'node:path'
