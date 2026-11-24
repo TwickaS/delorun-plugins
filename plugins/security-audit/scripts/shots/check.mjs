@@ -1,5 +1,5 @@
 import { chromium } from 'file:///home/vadim/delorun/code/node_modules/.pnpm/playwright@1.61.1/node_modules/playwright/index.mjs'
-const BASE = 'http://127.0.0.1:18311/pane.html'
+const BASE = 'http://127.0.0.1:18313/pane.html'
 const browser = await chromium.launch()
 for (const width of [390, 1440]) {
   for (const mode of ['live', 'report']) {
