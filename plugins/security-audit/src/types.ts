@@ -453,6 +453,55 @@ export interface CandidateEntry {
   note?: string | undefined
 }
 
+/**
+ * A role's working copy: the reviewed tree extracted from the target's Git repository, which the role may edit and
+ * build in. It lives at `<run>/agents/<id>/work/`, is the role's cwd, and is removed when the role finishes.
+ */
+export interface WorkCopy {
+  /** The copy's run-relative path, `agents/<id>/work`. */
+  readonly path: string
+  /** The Git revision the copy holds. */
+  readonly revision: string | null
+  /** Whether the copy is the reviewed tree: false when the working tree was dirty at intake and the copy is HEAD alone. */
+  readonly reviewed: boolean
+  /** Its bytes. */
+  readonly bytes: number
+  /** How many files it holds. */
+  readonly files: number
+  /** How many seconds it took to make, to one decimal place. */
+  readonly seconds: number
+  /** When it was created, as an ISO 8601 UTC timestamp. */
+  readonly created_at: string
+  /** When it was removed, or null while it is live. */
+  removed_at: string | null
+}
+
+/** One nested harness a role started from its working copy, and how it ended. */
+export interface NestedStart {
+  /** The agent id of the role that started it. */
+  readonly agent_id: string
+  /** The port it listens on, from 19988 to 19997. */
+  readonly port: number
+  /** The scratch HOME it runs with, run-relative. */
+  readonly home: string
+  /** Its process id, or null when it never started. */
+  readonly pid: number | null
+  /** When it started, as an ISO 8601 UTC timestamp. */
+  readonly started_at: string
+  /** When it stopped, or null while it runs. */
+  stopped_at: string | null
+  /** Its exit once stopped, or null while it runs or when it never started. */
+  readonly exit: { readonly code: number | null; readonly signal: string | null } | null
+}
+
+/** The nested harness starts a run has made, with the cap that bounds them. */
+export interface NestedHarness {
+  /** How many starts the run allows. */
+  readonly cap: number
+  /** Every start, in order. */
+  readonly starts: readonly NestedStart[]
+}
+
 /** One delegated agent of a run, as the run state records it. */
 export interface AgentEntry {
   /** The role it plays. */
@@ -485,6 +534,8 @@ export interface AgentEntry {
   promoted: string[]
   /** The coverage wave its assignment belongs to. */
   wave: number
+  /** The role's working copy, from the moment it is reserved until the run is read. */
+  work?: WorkCopy
 }
 
 /**
@@ -559,6 +610,10 @@ export interface HarnessState {
   incomplete_reason: string | null
   /** The prior runs the coordinator was shown at intake. */
   prior_runs: string[]
+  /** What a copy of the target measured the last time this run made one. */
+  copy_measurement?: { readonly bytes: number; readonly files: number }
+  /** The nested harness starts this run made, with its cap. */
+  nested_harness?: NestedHarness
 }
 
 /** How many candidates hold each standing, as `run-metadata.json` reports it. */
@@ -625,6 +680,12 @@ export interface RunMetadata {
   readonly agents: { readonly total: number; readonly invocations: number; readonly budget: number | null }
   /** The confinement facts the run was started under. */
   readonly execution: RunExecution
+  /** Every role's working copy, by canonical agent id, as it was made; a removed copy keeps its measurement. */
+  readonly work_copies: Readonly<Record<string, WorkCopy>>
+  /** What a copy of the target measured the last time the run made one, or `null` before the first copy. */
+  readonly copy_measurement: { readonly bytes: number; readonly files: number } | null
+  /** The nested harness starts the run made, with its cap. */
+  readonly nested_harness: NestedHarness
   /** The companion skill files the ledger selected. */
   readonly selected_companion_files: readonly string[]
   /** The prior runs the coordinator was shown at intake. */
