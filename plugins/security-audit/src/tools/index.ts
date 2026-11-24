@@ -1,12 +1,13 @@
 /**
  * Register every coordinator tool the Security audit chat mode exposes: intake,
- * the skill pack, the coverage ledger, the candidate store, finalization, the
- * report documents and the terminal state. Delegation registers its own tool
- * beside these.
+ * the skill pack, the architecture summary, the coverage ledger, the candidate
+ * store, finalization, the report documents and the terminal state. Delegation
+ * registers its own tool beside these.
  * @module @delorun/plugin-security-audit/tools
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from '../config.ts'
+import { registerArchitectureTool } from './architecture.ts'
 import { registerCandidatesTool } from './candidates.ts'
 import { registerCompleteTool } from './complete.ts'
 import { registerFinalizeTool } from './finalize.ts'
@@ -23,6 +24,7 @@ import { registerSkillTool } from './skill.ts'
 export function registerAuditTools(ctx: Context, config: Config): void {
   registerInitTool(ctx, config)
   registerSkillTool(ctx)
+  registerArchitectureTool(ctx, config)
   registerLedgerTool(ctx, config)
   registerCandidatesTool(ctx, config)
   registerFinalizeTool(ctx, config)
