@@ -1061,8 +1061,11 @@ async function applyResult(input: {
       const next = state.profile === 'quick' ? 'deferred' : 'planned';
       nextLedger = reassignUnits(nextLedger, reassign, 'coverage critic reopened the unit', next);
     }
-    const quickDone = state.profile === 'quick' && role === 'final-clean';
-    if (quickDone && added.length > 0) nextLedger = closeUnits(nextLedger, added, 'deferred', 'quick_profile_final_critic');
+    // HUNTING.md: a quick run's critic pass ends the coverage loop, so the units it
+    // proposes are deferred with the skill's own reason rather than hunted.
+    if (state.profile === 'quick' && added.length > 0) {
+      nextLedger = closeUnits(nextLedger, added, 'deferred', 'quick_profile_final_critic');
+    }
     await context.files.writeJson(inRun(context.run, 'harness/critic-resolved.json'), value.resolved_prior_leads ?? []);
     state.stage = nextLedger.some(unit => unit.status === 'planned') || reassign.length > 0 ? 'hunting' : 'validation';
     const answer: Record<string, Json> = { missing: jsonOf(missing.length), added: jsonOf(added), skipped: jsonOf(skipped), reassigned: jsonOf(reassign.length), stop: jsonOf(value.stop === true) };
