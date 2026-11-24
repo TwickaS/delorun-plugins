@@ -7,7 +7,7 @@
  * the existing workspace files Remote and follows the selected run directory's
  * change stream. The strip only prepares a message: it writes the start message
  * into the message box and never sends it.
- * @module @delorun/plugin-security-audit/client
+ * @module delorun-plugin-security-audit/client
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: the ctx.locale Context merge.

@@ -7,7 +7,7 @@
 # belong to chats running this mode and to the subagents they spawn.
 - insert:
     - id: security-audit
-      name: '@delorun/plugin-security-audit'
+      name: 'delorun-plugin-security-audit'
       config:
         mount: 'studio'
 
@@ -18,11 +18,11 @@
       config:
         id: security-audit
         name: 'Security audit'
-        description: A source-level audit of this repository: coverage-led hunting, independent validation and a target-neutral report.
+        description: 'A source-level audit of this repository: coverage-led hunting, independent validation and a target-neutral report.'
         order: 40
         plugins:
           - id: security-audit-agent
-            name: '@delorun/plugin-security-audit'
+            name: 'delorun-plugin-security-audit'
             config:
               mount: 'agent'
           - id: tool-fs

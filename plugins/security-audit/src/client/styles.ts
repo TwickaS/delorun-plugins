@@ -3,11 +3,11 @@
  *
  * A plugin built by the harness ships no stylesheet file, so the strings live
  * here and `apply` injects them once per page as one tagged style element.
- * @module @delorun/plugin-security-audit/client/styles
+ * @module delorun-plugin-security-audit/client/styles
  */
 
 /** The style element's owner tag, which also keys the duplicate check. */
-const STYLE_OWNER = '@delorun/plugin-security-audit'
+const STYLE_OWNER = 'delorun-plugin-security-audit'
 
 /** Every class the plugin's surfaces use. */
 const STYLES = `/* The security-audit surfaces' one stylesheet: the composer strip, the run pane
