@@ -8,6 +8,7 @@
  */
 import type { LedgerUnit } from '../ledger.ts'
 import { fencedBlockAfter, schemaBranch, sectionText, skillBlock } from '../skill.ts'
+import { targetSections, type TargetContext } from './additions.ts'
 
 /** The most bytes one promoted artifact may hold. */
 export const MAX_ARTIFACT_BYTES = 4 * 1024 * 1024
@@ -79,6 +80,8 @@ export interface BriefContext {
   readonly architecture?: string | undefined
   /** A short coordinator note appended to the brief. */
   readonly coordinatorNote?: string | undefined
+  /** What is known about the target beyond the skill's own text, composed after the verbatim blocks. */
+  readonly target?: TargetContext | undefined
 }
 
 /** A carried prior record, limited to what a hunter may see of it. */
@@ -449,6 +452,7 @@ export function hunterBrief(context: BriefContext, units: readonly LedgerUnit[],
     '',
     peerText(context.ledger, assigned),
     '',
+    ...context.target === undefined ? [] : [targetSections(context.target), ''],
     promotionText(context.run),
     '',
     'Use a command for a bounded build, test, server and client pair, or fixture. A local check names the command, its input, its limits, the observed minimum result and the one promoted artifact. Never extend a check past the boundary result.',
