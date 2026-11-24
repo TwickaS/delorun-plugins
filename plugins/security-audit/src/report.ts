@@ -5,10 +5,12 @@
  * machine-readable fingerprint footer keeps prose and JSON aligned.
  * @module @delorun/plugin-security-audit/report
  */
-import type { CandidateEntry, HarnessState, LedgerUnit, ReportDocument, RunMetadata } from './types.ts'
+import type { CandidateEntry, HarnessState, LedgerUnit, ReportDocument, RunMetadata, WorkCopy } from './types.ts'
+import { NESTED_HARNESS_CAP } from './scripts-copy.ts'
 import { finalRecords } from './candidates.ts'
 import { validateLedger } from './ledger.ts'
 import { findingsValidator, REPORT_SCHEMA } from './skill.ts'
+import { PROGRESS_SCHEMA, progressCounts, type ProgressDocument } from './progress-schema.ts'
 import {
   type AuditFiles,
   type RunLocation,
@@ -134,6 +136,45 @@ export async function writeLedger(files: AuditFiles, run: RunLocation, ledger: r
 }
 
 /**
+ * Build the progress document a run writes beside its ledger, so the pane and other integrations read one versioned
+ * file instead of scraping the ledger.
+ * @param state - the run's state.
+ * @param ledger - the units.
+ * @param candidates - the candidates.
+ * @param findings - the records written so far.
+ * @param writtenAt - when the document is written, ISO 8601 UTC.
+ * @returns the document.
+ */
+export function progressDocument(
+  state: HarnessState,
+  ledger: readonly LedgerUnit[],
+  candidates: readonly CandidateEntry[],
+  findings: readonly { readonly verdict: string }[],
+  writtenAt: string,
+): ProgressDocument {
+  const counts = progressCounts(ledger)
+  const working = ledger
+    .filter(unit => unit.status === 'in_progress' && unit.agent_id !== null)
+    .map(unit => ({ coverage_id: unit.coverage_id, owner: unit.agent_id ?? '', wave: unit.wave, boundary: unit.boundary }))
+  return {
+    schema: PROGRESS_SCHEMA,
+    run_id: state.run_id,
+    status: state.run_status,
+    stage: state.stage,
+    wave: state.wave,
+    written_at: writtenAt,
+    counts,
+    in_progress: working,
+    spent: state.invocations,
+    budget: state.budget,
+    remaining: state.budget === null ? null : Math.max(0, state.budget - state.invocations),
+    candidates_pending: candidates.filter(candidate => candidate.status === 'proposed').length,
+    findings_confirmed: findings.filter(record => record.verdict === 'confirmed').length,
+    findings_needs_validation: findings.filter(record => record.verdict === 'needs_validation').length,
+  }
+}
+
+/**
  * Build the derived run metadata, the pane's and the report's view of the run.
  * @param state - the run's state.
  * @param ledger - the units.
@@ -167,6 +208,9 @@ export function runMetadata(state: HarnessState, ledger: readonly LedgerUnit[], 
     agent_models: Object.fromEntries(Object.entries(state.agents).map(([id, agent]) => [id, { role: agent.role, kind: agent.kind, model: agent.model ?? null }])),
     agents: { total: Object.keys(state.agents).length, invocations: state.invocations, budget: state.budget },
     execution: state.execution,
+    work_copies: Object.fromEntries(Object.entries(state.agents).flatMap(([id, agent]) => agent.work === undefined ? [] : [[id, agent.work as WorkCopy]])),
+    copy_measurement: state.copy_measurement ?? null,
+    nested_harness: { cap: state.nested_harness?.cap ?? NESTED_HARNESS_CAP, starts: state.nested_harness?.starts ?? [] },
     selected_companion_files: companionFiles,
     prior_runs: state.prior_runs,
     shared_file_owners: Object.fromEntries(SHARED_RUN_FILES.map(name => [name, 'coordinator' as const])),
