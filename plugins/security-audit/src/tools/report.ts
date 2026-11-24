@@ -24,7 +24,7 @@ import type { ReportDocument, RunLocation } from '../types.ts'
 
 const execFileAsync = promisify(execFile)
 
-/** The three report documents, in the order a report writes them. */
+/** The three report documents, in the order a reader takes them. */
 const REPORT_DOCUMENT = ['REPORT', 'FINDINGS_DETAIL', 'NEEDS_VALIDATION'] as const
 
 /** A git remote that may publish the repository the run audits. */
