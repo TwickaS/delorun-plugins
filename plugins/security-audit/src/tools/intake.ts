@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxEnforcement, SandboxMode, SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 import type { RoleModelOverrides } from '../config.ts'
 import { MODELED_ROLES } from '../config.ts'
+import { ledgerValidator } from '../skill.ts'
 import { type AuditFiles, now } from '../store.ts'
 import type { RoleModels, RunLocation, SourceRef } from '../types.ts'
 
@@ -96,8 +97,10 @@ export async function intakeSandbox(ctx: Context, cwd: string, signal: AbortSign
  */
 export async function readSourceRef(target: string): Promise<SourceRef> {
   try {
-    const commit = (await execFileAsync('git', ['-C', target, 'rev-parse', 'HEAD'], { timeout: 5_000 })).stdout.trim()
-    const status = (await execFileAsync('git', ['-C', target, 'status', '--porcelain', '--untracked-files=no'], { timeout: 5_000 })).stdout
+    // The target's own configuration is untrusted: `core.fsmonitor` may name a
+    // command that `git status` would run, so it is switched off for both calls.
+    const commit = (await execFileAsync('git', ['-C', target, '-c', 'core.fsmonitor=false', 'rev-parse', 'HEAD'], { timeout: 5_000 })).stdout.trim()
+    const status = (await execFileAsync('git', ['-C', target, '-c', 'core.fsmonitor=false', 'status', '--porcelain', '--untracked-files=no'], { timeout: 5_000 })).stdout
     return { commit: commit === '' ? null : commit, dirty: status.trim().length > 0, dirty_known: true, captured_at: now() }
   } catch {
     return { commit: null, dirty: false, dirty_known: false, captured_at: now() }
@@ -196,9 +199,10 @@ export function roleModelsJson(models: RoleModelOverrides): Record<string, Recor
 }
 
 /**
+ * The skill's own repository-relative path rule, so intake and the gate agree.
  * @param path - a candidate repository-relative path.
  * @returns whether it is a safe relative path.
  */
 export function isSafePath(path: string): boolean {
-  return !path.startsWith('/') && !path.split('/').some(part => part === '..' || part === '')
+  return ledgerValidator.isSafeRelativePath(path)
 }

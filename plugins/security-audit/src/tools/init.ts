@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { budgetSummary, proposeBudget, reconnaissanceGate } from '../budget.ts'
+import { budgetSummary, proposeBudget, reconnaissanceGate, reservationFor } from '../budget.ts'
 import type { Config } from '../config.ts'
 import { writeFindings, writeLedger, writeRunMetadata } from '../report.ts'
 import { targetOf } from '../run-context.ts'
@@ -49,8 +49,15 @@ const PROFILE = ['quick', 'standard', 'deep'] as const
 const CHECK_IN = ['straight_through', 'after_recon', 'every_stage'] as const
 const SEED = ['reconnaissance', 'rc'] as const
 
-/** The fewest agent calls a profile needs: four reconnaissance roles, its critics and one verifier. */
-const MINIMUM_BUDGET = { quick: 6, standard: 7, deep: 7 } as const
+/**
+ * The fewest agent calls a profile needs: four reconnaissance roles, its
+ * critics and one verifier, from the one budget home so the two cannot drift.
+ * @param profile - the run's profile.
+ * @returns the minimum budget.
+ */
+function minimumBudget(profile: (typeof PROFILE)[number]): number {
+  return reservationFor(profile, 1).total
+}
 
 /**
  * The text of an intake answer.
@@ -119,8 +126,8 @@ export function registerInitTool(ctx: Context, config: Config): void {
     async execute(args, exec: ToolRunContext) {
       const profile = args.profile ?? 'standard'
       if (args.budget !== undefined && args.budget < 1) throw new Error('budget must be at least 1, or omit it to have the run propose one')
-      if (args.budget !== undefined && args.budget < MINIMUM_BUDGET[profile]) {
-        throw new Error('a ' + profile + ' audit needs at least ' + String(MINIMUM_BUDGET[profile]) + ' invocations to fund four reconnaissance roles, its critic reserve and one verifier; raise the budget, narrow the scope or use a coarser profile')
+      if (args.budget !== undefined && args.budget < minimumBudget(profile)) {
+        throw new Error('a ' + profile + ' audit needs at least ' + String(minimumBudget(profile)) + ' invocations to fund four reconnaissance roles, its critic reserve and one verifier; raise the budget, narrow the scope or use a coarser profile')
       }
       if (exec.agent === undefined) throw new Error('the audit tools need an owning agent session')
       const agent: Agent = exec.agent
