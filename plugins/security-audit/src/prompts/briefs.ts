@@ -6,8 +6,8 @@
  * so a stale ledger fails without spending an invocation.
  * @module @delorun/plugin-security-audit/prompts/briefs
  */
-import type { LedgerUnit } from '../types.ts'
-import { fencedBlockAfter, schemaBranch, sectionText, skillBlock } from './skill-text.ts'
+import type { LedgerUnit } from '../ledger.ts'
+import { fencedBlockAfter, schemaBranch, sectionText, skillBlock } from '../skill.ts'
 
 /** The most bytes one promoted artifact may hold. */
 export const MAX_ARTIFACT_BYTES = 4 * 1024 * 1024
@@ -154,7 +154,7 @@ function isolationText(run: BriefRun): string {
     'You run in a fresh child session whose working directory is your own scratch directory. Reads stay open, so read the target freely; writes are confined as follows.',
     writes,
     'This workspace requires an off network, and the plugin refused to start you without it. Do not fetch anything: no dependency installation, no registry, no deployed endpoint, no provider API, no shared service.',
-    'Your home directory is protected, so ~/.delorun is not part of this audit. Treat everything outside the target as absent unless the target names it.',
+    'The Delorun home, ~/.delorun, is hidden from confined commands. The rest of the host home is readable to target code, so a check that depends on hiding host files is needs_validation with that exact reason; treat everything outside the target as absent unless the target names it.',
     'Every command you run is a fresh process tree. A build or test may write beside the source only inside your scratch directory.',
   ].join('\n')
 }
@@ -383,3 +383,301 @@ export function reconBrief(context: BriefContext, focus?: string): string {
   ].join('\n')
 }
 
+/**
+ * Compose a hunter brief from the exact skill blocks and the assigned units,
+ * in the order HUNTING.md requires: role preamble, architecture, assignment,
+ * selected blocks, exclusions, the hunting method, the promotion procedure,
+ * the validation rules, carried prior records and peers, the sandbox and
+ * promotion facts, and the structured result with its schema branches.
+ * @param context - the run and the ledger.
+ * @param units - the units assigned to this hunter.
+ * @param carried - the unchanged prior confirmed records excluded from this hunt.
+ * @returns the brief.
+ * @throws {SkillReferenceError} when a selected block reference is not in the pack.
+ */
+export function hunterBrief(context: BriefContext, units: readonly LedgerUnit[], carried: readonly CarriedRecord[]): string {
+  const assigned = units.map(unit => unit.coverage_id)
+  const companions = units.flatMap(unit => unit.selected_companion_blocks)
+  const refs = [
+    ...units.flatMap(unit => unit.ordinary_attack_class_block === null ? [] : [unit.ordinary_attack_class_block]),
+    ...companions,
+    ...companionSections(companions),
+  ]
+  const excluded = units.flatMap(unit => unit.excluded_blocks.map(entry => '- ' + entry.block + ': ' + entry.reason))
+  return [
+    header(context, 'hunter', 'Find source-grounded security invariant failures in the assigned coverage units, and the smallest effective source fix for each. You stay at the boundary result: you do not expand harm, contact a deployment or install anything.'),
+    '',
+    '## Architecture',
+    '',
+    architectureText(context),
+    '',
+    '## Assigned coverage',
+    '',
+    'Coverage ids: ' + assigned.join(', '),
+    '',
+    '```json',
+    unitText(units),
+    '```',
+    '',
+    '## Selected skill blocks (verbatim)',
+    '',
+    exactBlocks(refs),
+    '',
+    '## Excluded blocks',
+    '',
+    excluded.length === 0 ? 'None were recorded as excluded.' : excluded.join('\n'),
+    '',
+    '## Core hunting method (verbatim)',
+    '',
+    fencedBlockAfter('HUNTING.md', 'Core hunting method'),
+    '',
+    '## Promotion procedure (verbatim)',
+    '',
+    fencedBlockAfter('HUNTING.md', 'Promotion procedure'),
+    '',
+    '## Core validation rules (verbatim)',
+    '',
+    fencedBlockAfter('HUNTING.md', 'Core validation rules'),
+    '',
+    localChecksText(context.run),
+    '',
+    '## Carried prior records',
+    '',
+    carriedText(carried),
+    '',
+    '## Peers',
+    '',
+    peerText(context.ledger, assigned),
+    '',
+    promotionText(context.run),
+    '',
+    'Use a command for a bounded build, test, server and client pair, or fixture. A local check names the command, its input, its limits, the observed minimum result and the one promoted artifact. Never extend a check past the boundary result.',
+    '',
+    '## Structured hunter result',
+    '',
+    '```json',
+    fencedBlockAfter('HUNTING.md', 'Structured hunter result'),
+    '```',
+    '',
+    'Each candidates entry uses proposed_verdict in place of verdict. The gate checks it against the confirmed and needs_validation branches below.',
+    '',
+    '### confirmed branch',
+    '',
+    '```json',
+    schemaBranch('confirmed'),
+    '```',
+    '',
+    '### needs_validation branch',
+    '',
+    '```json',
+    schemaBranch('needs_validation'),
+    '```',
+  ].join('\n')
+}
+
+/**
+ * Compose a candidate verifier brief. It receives the candidate, its linked
+ * units and the relevant validation blocks, but never another verifier's
+ * conclusion.
+ * @param context - the run and the ledger.
+ * @param candidate - the candidate under review.
+ * @param units - the units the candidate is linked to.
+ * @returns the brief.
+ * @throws {SkillReferenceError} when a selected block reference is not in the pack.
+ */
+export function verifierBrief(context: BriefContext, candidate: CandidateView, units: readonly LedgerUnit[]): string {
+  const companions = units.flatMap(unit => unit.selected_companion_blocks)
+  return [
+    header(context, 'verifier', 'Try to refute a candidate you did not write, from current source and bounded local evidence. A corrected record replaces the hunter’s wording; a disproved claim is rejected, not parked.'),
+    '',
+    '## Architecture',
+    '',
+    architectureText(context),
+    '',
+    '## Candidate',
+    '',
+    '```json',
+    JSON.stringify(candidate.record, undefined, 2),
+    '```',
+    '',
+    'Fingerprint under review: ' + candidate.fingerprint,
+    '',
+    '## Linked coverage units',
+    '',
+    '```json',
+    unitText(units),
+    '```',
+    '',
+    '## Relevant skill blocks (verbatim)',
+    '',
+    exactBlocks([...companions, ...companionSections(companions)]),
+    '',
+    '## Candidate-verifier prompt (verbatim)',
+    '',
+    fencedBlockAfter('VALIDATION-AND-REPORTING.md', 'Candidate-verifier prompt'),
+    '',
+    '## Promotion procedure (verbatim)',
+    '',
+    fencedBlockAfter('VALIDATION-AND-REPORTING.md', 'Copy this promotion procedure'),
+    '',
+    promotionText(context.run),
+    '',
+    localChecksText(context.run),
+    '',
+    '## Verdict branches',
+    '',
+    '### confirmed',
+    '',
+    '```json',
+    schemaBranch('confirmed'),
+    '```',
+    '',
+    '### needs_validation',
+    '',
+    '```json',
+    schemaBranch('needs_validation'),
+    '```',
+    '',
+    '### rejected',
+    '',
+    '```json',
+    schemaBranch('rejected'),
+    '```',
+    '',
+    'Preserve the candidate’s fingerprint in the record. If you find a genuinely different root cause, do not invent a second fingerprint inside this result: report the decision on this fingerprint and name the separate root cause in the record’s prose so the coordinator can seed its own unit.',
+  ].join('\n')
+}
+
+/**
+ * Compose a record verifier brief for Phase 5. It checks the structured
+ * record, not the hunter's write-up, and it did not hunt or validate the
+ * candidate before.
+ * @param context - the run and the ledger.
+ * @param candidate - the final record, with any pending replacement.
+ * @param units - the units the record is linked to.
+ * @returns the brief.
+ */
+export function finalVerifierBrief(context: BriefContext, candidate: CandidateView, units: readonly LedgerUnit[]): string {
+  const record = candidate.pending_record ?? candidate.record
+  return [
+    header(context, 'final verifier', 'Verify one final record with fresh eyes, inside source and local boundaries. You did not hunt the candidate and did not perform its candidate validation.'),
+    '',
+    '## Architecture',
+    '',
+    architectureText(context),
+    '',
+    '## Record under review',
+    '',
+    '```json',
+    JSON.stringify(record, undefined, 2),
+    '```',
+    '',
+    'Fingerprint: ' + candidate.fingerprint,
+    candidate.pending_record === undefined ? '' : 'This is a proposed replacement produced by an earlier final verifier. Verify the replacement itself.',
+    '',
+    '## Linked coverage units',
+    '',
+    '```json',
+    unitText(units),
+    '```',
+    '',
+    '## Phase 5 method (verbatim)',
+    '',
+    sectionText('VALIDATION-AND-REPORTING.md', 'Phase 5: Verify the final records with fresh eyes'),
+    '',
+    '## Record branches',
+    '',
+    '### confirmed',
+    '',
+    '```json',
+    schemaBranch('confirmed'),
+    '```',
+    '',
+    '### needs_validation',
+    '',
+    '```json',
+    schemaBranch('needs_validation'),
+    '```',
+    '',
+    '### rejected',
+    '',
+    '```json',
+    schemaBranch('rejected'),
+    '```',
+  ].join('\n')
+}
+
+/**
+ * Compose a coverage-critic brief, for the post-wave critic or for the
+ * distinct final-clean critic that must also accept no work before coverage
+ * is called complete.
+ * @param context - the run and the ledger.
+ * @param candidates - the candidate fingerprints and their states.
+ * @param finalClean - whether this is the distinct final-clean pass.
+ * @returns the brief.
+ * @throws {SkillReferenceError} when the critic section is not in the pack.
+ */
+export function criticBrief(context: BriefContext, candidates: readonly CandidateSummary[], finalClean: boolean): string {
+  const gaps = context.ledger.filter(unit => unit.prior_status !== 'none' && unit.prior_status !== 'new')
+  const priorGaps = gaps.length === 0
+    ? 'No prior-run gap is recorded in this ledger.'
+    : gaps.map(unit => '- ' + unit.coverage_id + ': ' + unit.prior_status + ' (' + unit.status + ')').join('\n')
+  const preamble = finalClean
+    ? 'You are the distinct final-clean critic of one source-grounded security audit, run only after the post-wave critic accepted no further work. Confirm that independently: return no accepted work only when the ledger really does cover the target at this profile.'
+    : 'Find coverage gaps, not findings: the ledger is the coverage claim and a prose summary is not. Report every unmapped entry point, unchecked parallel path, missing lifecycle mode, unjustified exclusion and unit closed without owned paths or checks.'
+  return [
+    header(context, finalClean ? 'final-clean critic' : 'coverage critic', preamble),
+    '',
+    '## Architecture',
+    '',
+    architectureText(context),
+    '',
+    '## Coverage ledger',
+    '',
+    '```json',
+    JSON.stringify(context.ledger, undefined, 2),
+    '```',
+    '',
+    '## Candidate fingerprints and states',
+    '',
+    '```json',
+    JSON.stringify(candidates, undefined, 2),
+    '```',
+    '',
+    '## Prior-run gaps',
+    '',
+    priorGaps,
+    '',
+    '## Critic method and result contract (verbatim)',
+    '',
+    sectionText('HUNTING.md', 'Coverage-critic waves'),
+    '',
+    finalClean
+      ? 'This is the final-clean pass. Return missing_units and reassign_ids empty only when you accept no remaining work; the coordinator completes coverage when this pass and the post-wave critic both accept none.'
+      : 'The coordinator, not your stop flag alone, decides whether another wave runs: it also needs no planned units left. Propose coverage with source-backed reasons, never findings.'
+  ].join('\n')
+}
+
+/**
+ * The command form and the recorded limits of a bounded local check, as the
+ * harness really enforces them: it does not empty the environment, and it bounds
+ * the wall clock rather than CPU, memory, process count, file size or disk. A
+ * check whose control did not hold is needs_validation, never reported as bounded.
+ * @param run - the role's run facts.
+ * @returns the local-execution section.
+ */
+function localChecksText(run: BriefRun): string {
+  return [
+    '## Bounded local checks',
+    '',
+    'The harness does not empty the environment, so empty it yourself: launch every target-controlled process as env -i with a short explicit allowlist, for example',
+    '',
+    '    env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=' + run.scratch + '/home TMPDIR=' + run.scratch + '/tmp MY_SAFE_VALUE=dummy <command>',
+    '',
+    'Create ' + run.scratch + '/home and ' + run.scratch + '/tmp first, and record the variable names and their safe values with the check. HOME points into your scratch because the rest of the host home is readable to target code.',
+    '',
+    'The harness bounds the wall clock of a foreground command (120 seconds by default, 600 at most) and turns a command past its deadline into a background job, which then has no deadline. Bound every check yourself with timeout <seconds> and record the number. It applies no CPU, memory, process-count, file-size or disk limit: a check that needs one is needs_validation naming the missing bound, never a check reported as having run under limits.',
+    '',
+    'Record each check as the command, its exact input, the environment variable names and safe values, the git or sandbox runner and its enforcement (full or partial) as the harness reports them, the wall-clock bound and the minimum observed result. A check whose control did not hold is needs_validation with its exact blocker. Writes go only to your scratch directory; on a Landlock or Seatbelt host the host temporary directory is writable too, so say which host you ran on rather than claiming scratch-only.',
+  ].join('\n')
+}
