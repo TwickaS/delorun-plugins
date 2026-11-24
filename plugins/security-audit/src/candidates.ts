@@ -5,36 +5,10 @@
  * verification may enter `findings.json`.
  * @module @delorun/plugin-security-audit/candidates
  */
-import type { LedgerCheck } from './ledger.ts'
-import { type AuditFiles, type RunLocation, inRun, now } from './store.ts'
+import { type AuditFiles, type RunLocation, CANDIDATES_FILE, inRun, now } from './store.ts'
+import type { CandidateEntry, CandidateVerification } from './types.ts'
 
-/** One independent verification of a candidate. */
-export interface CandidateVerification {
-  readonly agent_id: string
-  readonly decision: 'confirmed' | 'needs_validation' | 'rejected'
-  readonly record: Record<string, unknown>
-  readonly checks: readonly LedgerCheck[]
-  readonly at: string
-}
-
-/** One candidate and its verification history. */
-export interface CandidateEntry {
-  readonly fingerprint: string
-  status: 'proposed' | 'confirmed' | 'needs_validation' | 'rejected'
-  record: Record<string, unknown>
-  readonly proposed_by: string
-  readonly proposed_at: string
-  /** Coverage ids that link this fingerprint. */
-  proposed_units: string[]
-  readonly verifications: CandidateVerification[]
-  final_verified: boolean
-  final_by: string | null
-  final_at: string | null
-  /** A phase-5 replacement awaiting its own independent verifier. */
-  pending_record?: Record<string, unknown> | undefined
-  /** A coordinator note about a duplicate or a non-material correction. */
-  note?: string | undefined
-}
+export type { CandidateEntry, CandidateVerification } from './types.ts'
 
 /**
  * Read a record's overall severity from the object schema or the string form used by older persisted records.
@@ -59,9 +33,9 @@ export function overallSeverityOf(record: Record<string, unknown>): string {
  * @throws {Error} when the file is not an array.
  */
 export async function readCandidates(files: AuditFiles, run: RunLocation): Promise<CandidateEntry[]> {
-  const value = await files.readJson(inRun(run, 'harness/candidates.json'))
+  const value = await files.readJson(inRun(run, CANDIDATES_FILE))
   if (value === undefined) return []
-  if (!Array.isArray(value)) throw new Error('harness/candidates.json must hold a top-level array')
+  if (!Array.isArray(value)) throw new Error(`${CANDIDATES_FILE} must hold a top-level array`)
   return value as CandidateEntry[]
 }
 
@@ -72,7 +46,7 @@ export async function readCandidates(files: AuditFiles, run: RunLocation): Promi
  * @param candidates - the candidates.
  */
 export async function writeCandidates(files: AuditFiles, run: RunLocation, candidates: readonly CandidateEntry[]): Promise<void> {
-  await files.writeJson(inRun(run, 'harness/candidates.json'), [...candidates].sort((left, right) => left.fingerprint < right.fingerprint ? -1 : left.fingerprint > right.fingerprint ? 1 : 0))
+  await files.writeJson(inRun(run, CANDIDATES_FILE), [...candidates].sort((left, right) => left.fingerprint < right.fingerprint ? -1 : left.fingerprint > right.fingerprint ? 1 : 0))
 }
 
 function stable(value: unknown): string {

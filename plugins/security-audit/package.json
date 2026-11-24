@@ -58,7 +58,9 @@
     "@deepseek-ai/dsh-sandbox-policy": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-session": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-subagent": "^0.2.2-rc.3",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "^0.2.2-rc.3",
+    "@deepseek-ai/schemastery": "^3.18.5",
     "@deepseek-ai/dsh-working-directory": "^0.2.2-rc.3",
     "@deepseek-ai/schemastery": "^3.18.5"
   },
@@ -77,6 +79,7 @@
     "@deepseek-ai/dsh-sandbox-policy": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-session": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-subagent": "^0.2.2-rc.3",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-working-directory": "^0.2.2-rc.3",
     "@deepseek-ai/schemastery": "^3.18.5",
