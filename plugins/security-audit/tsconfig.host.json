@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2024"
+    ]
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/client"
+  ]
+}
