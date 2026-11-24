@@ -12,8 +12,9 @@ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../config.ts'
 import { readCandidates } from '../candidates.ts'
 import { REPORT_FILES, expectedFingerprints, findingsDocument, writeFindings, writeLedger, writeRunMetadata } from '../report.ts'
+import { denialProblems } from '../denials.ts'
 import { requireMutable, runContext } from '../run-context.ts'
-import { updateState } from '../store.ts'
+import { inRun, readDenials, updateState } from '../store.ts'
 import type { ReportDocument } from '../types.ts'
 
 const REPORT_DOCUMENT = ['REPORT', 'FINDINGS_DETAIL', 'NEEDS_VALIDATION'] as const
@@ -58,6 +59,9 @@ export function registerFinalizeTool(ctx: Context, config: Config): void {
       const orphaned = [...new Set(context.ledger.flatMap(unit => unit.result_fingerprints.filter(fingerprint => !known.has(fingerprint))))]
       const unresolved = [...new Set([...unverified, ...orphaned])]
       const open = context.ledger.filter(unit => ['planned', 'in_progress', 'blocked', 'deferred'].includes(unit.status)).map(unit => unit.coverage_id)
+      const denials = await readDenials(context.files, context.run)
+      const missingDenials = denialProblems(records, denials)
+      if (missingDenials.length > 0) throw new Error('the run cannot finalize:\n' + missingDenials.join('\n'))
       const incomplete = unresolved.length > 0 || open.length > 0 || args.incomplete_reason !== undefined
       const reason = args.incomplete_reason
         ?? (unresolved.length > 0 ? 'unvalidated candidates: ' + unresolved.join(', ')

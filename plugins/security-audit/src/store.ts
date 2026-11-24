@@ -59,6 +59,9 @@ export const FINDINGS_FILE = 'findings.json'
 /** The candidate store between hunting and final verification; the coordinator's bookkeeping, not a report file. */
 export const CANDIDATES_FILE = 'candidates.json'
 
+/** The denial test each high or critical finding carries, keyed by fingerprint. */
+export const DENIALS_FILE = 'denial-tests.json'
+
 /** The coordinator's private bookkeeping: agents, budget, stage and the confinement facts. */
 export const STATE_FILE = 'state.json'
 
@@ -224,6 +227,20 @@ function reincludeProblem(rules: readonly { readonly file: string, readonly text
     }
   }
   return undefined
+}
+
+/**
+ * Read a run's denial tests, tolerantly: a run that has written none yet has an empty list.
+ * @param files - file access.
+ * @param run - the run.
+ * @returns the tests, or an empty list when the file is absent.
+ * @throws {Error} when the file is present and is not a top-level array.
+ */
+export async function readDenials(files: AuditFiles, run: RunLocation): Promise<unknown[]> {
+  const value = await files.readJson(inRun(run, DENIALS_FILE))
+  if (value === undefined) return []
+  if (!Array.isArray(value)) throw new Error(`${DENIALS_FILE} must hold a top-level array`)
+  return value
 }
 
 const locks = new Map<string, Promise<void>>()
