@@ -82,6 +82,13 @@ export const SHARED_RUN_FILES: readonly SharedRunFile[] = [
   NEEDS_VALIDATION_FILE,
 ]
 
+/** The report document each report file holds, keyed by the document `audit_report` writes. */
+export const REPORT_FILES: Readonly<Record<'REPORT' | 'FINDINGS_DETAIL' | 'NEEDS_VALIDATION', string>> = {
+  REPORT: REPORT_FILE,
+  FINDINGS_DETAIL: FINDINGS_DETAIL_FILE,
+  NEEDS_VALIDATION: NEEDS_VALIDATION_FILE,
+}
+
 /** Every file at a run's root that only the coordinator writes. */
 export const COORDINATOR_RUN_FILES: readonly CoordinatorRunFile[] = [...SHARED_RUN_FILES, CANDIDATES_FILE]
 
