@@ -162,6 +162,7 @@ const STYLES = `/* The security-audit surfaces' one stylesheet: the composer str
 }
 
 .sa-pane-icon {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
@@ -328,6 +329,8 @@ const STYLES = `/* The security-audit surfaces' one stylesheet: the composer str
   font-size: 12px;
   line-height: 16px;
   color: var(--dsw-alias-label-secondary);
+  /* Long file paths and assertions must wrap rather than widen the pane. */
+  overflow-wrap: anywhere;
 }
 
 .sa-list {
@@ -365,9 +368,10 @@ const STYLES = `/* The security-audit surfaces' one stylesheet: the composer str
 }
 
 .sa-finding {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   box-sizing: border-box;
   width: 100%;
   padding: 2px 0;
@@ -389,10 +393,13 @@ const STYLES = `/* The security-audit surfaces' one stylesheet: the composer str
 }
 
 .sa-finding-path {
-  flex: none;
-  max-width: 40%;
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sa-empty {
@@ -436,6 +443,377 @@ const STYLES = `/* The security-audit surfaces' one stylesheet: the composer str
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+
+/* One quiet card: the overview, a phase notice, a finding and the stop form all
+   ride this same hairline-edged glass, so nothing shouts. */
+.sa-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.sa-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+@media (min-width: 520px) {
+  .sa-overview-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.sa-overview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sa-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sa-bar {
+  overflow: hidden;
+  height: 4px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sa-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-brand-primary);
+  transition: width 240ms ease-out;
+}
+
+/* A phase-change notification: quiet, one line, dismissible. */
+.sa-notice-card {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sa-notice-icon {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+}
+
+.sa-notice-icon[data-kind='units'] {
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.sa-notice-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sa-notice-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.sa-notice-line {
+  margin: 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sa-notice-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .sa-notice-close:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* The unread dot on the pane's own glyph. */
+.sa-badge {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -6px 0 0 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+}
+
+.sa-mode {
+  flex: none;
+}
+
+/* A collapsible section head: the whole line is the target. */
+.sa-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sa-chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 160ms ease-out;
+}
+
+.sa-chevron-open {
+  transform: rotate(180deg);
+}
+
+.sa-map {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.sa-map-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sa-map-boundary {
+  margin: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The report's own header and actions. */
+.sa-report-repo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.sa-partial {
+  margin: 0;
+  padding-top: 2px;
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.sa-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One confirmed finding. */
+.sa-finding-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sa-finding-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.sa-boundary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sa-finding-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sa-traces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.sa-trace {
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-brand-primary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sa-trace:focus-visible,
+.sa-disclosure:focus-visible,
+.sa-notice-close:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: calc(-1 * var(--dsw-focus-ring-width));
+}
+
+.sa-denial {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.sa-denial-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sa-denial-line {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sa-record-toggle {
+  padding-top: 2px;
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.sa-raw {
+  overflow: auto;
+  max-height: 320px;
+  margin: 0;
+  padding: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* The needs-validation table: four columns, stacking to one on a phone. */
+.sa-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1.6fr);
+  gap: 4px 10px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+@media (max-width: 520px) {
+  .sa-table {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sa-table-head {
+    display: none;
+  }
+}
+
+.sa-table-head,
+.sa-table-row {
+  display: contents;
+}
+
+.sa-table-head .sa-table-cell {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sa-table-cell {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sa-table-title {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The export row: a folder field and its button, filling the pane. */
+.sa-export {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sa-export > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sa-error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The stop form. */
+.sa-stop {
+  gap: 4px;
 }
 
 /* The session-header control: a compact icon button beside the header's quiet actions. */

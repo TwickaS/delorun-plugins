@@ -30,7 +30,7 @@ import { SECURITY_AUDIT_TAB_ID, SECURITY_AUDIT_TAB_KIND, securityAuditDefinition
 import { SecurityAuditHeaderAction, type SecurityAuditHeaderInjected } from './HeaderAction.tsx'
 import { NS, en, zh, type SecurityAuditKey } from './locales.ts'
 import { AuditModelCatalog } from './models.ts'
-import { SecurityAuditPane, type SecurityAuditPaneInjected } from './pane.tsx'
+import { SecurityAuditPane, type ControlOutcome, type SecurityAuditPaneInjected } from './pane.tsx'
 import { SecurityAuditStrip, type SecurityAuditStripInjected } from './strip.tsx'
 import { injectStyles } from './styles.ts'
 
@@ -67,7 +67,7 @@ export const STRIP_ID = 'security-audit'
 export const STRIP_ORDER = 10
 
 /** Required services: slots, copy, Sessions, the right sidebar's tabs, and the workspace files and model remotes. */
-export const inject = ['slots', 'locale', 'sessions', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.workspaceFiles', 'remote.session']
+export const inject = ['slots', 'locale', 'sessions', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.workspaceFiles', 'remote.session', 'remote.commands']
 
 /**
  * Register the dictionaries, the stylesheet, the tab type, its body, the header
@@ -111,11 +111,30 @@ export function apply(ctx: ClientContext): void {
     const existing = faces.get(sessionId)
     if (existing !== undefined) return existing
     const controller = controllerFor(sessionId)
+    /**
+     * Run one control command against the shown run.
+     * @param line - the command name, the run directory, and the rest of the line.
+     * @returns whether it succeeded, and the line the pane shows.
+     */
+    const command = async (line: (directory: string) => string): Promise<ControlOutcome> => {
+      const directory = controller.directory()
+      if (directory === undefined) return { ok: false, message: t('control.noRun') }
+      const result = await ctx.remote.commands.execute(sessionId, line(directory), [])
+      if (!result.ok) return { ok: false, message: result.error.message }
+      if (result.value === undefined) return { ok: false, message: t('control.unknown') }
+      return result.value.result.kind === 'error'
+        ? { ok: false, message: result.value.result.text }
+        : { ok: true, message: result.value.result.text ?? t('control.done') }
+    }
     const face: SecurityAuditPaneInjected = {
       hooks: { audit: controller.state },
       attach: () => controller.attach(),
       select: directory => { controller.select(directory) },
       reload: () => { controller.reload() },
+      control: (action, reason) => command(directory => reason === ''
+        ? `/audit-${action} ${directory}`
+        : `/audit-${action} ${directory} ${reason}`),
+      exportReport: folder => command(directory => `/audit-export ${directory} ${folder}`),
     }
     faces.set(sessionId, face)
     return face

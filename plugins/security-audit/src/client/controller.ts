@@ -12,10 +12,13 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import type { WorkspaceDirectoryListing, WorkspaceFileText, WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'
 import type { RemoteResult, RemoteStreamHandle } from '@deepseek-ai/dsh-typert-protocol'
 import {
-  CANDIDATES_FILE, COVERAGE_LEDGER_FILE, FINDINGS_FILE, RUNS_DIRECTORY, RUN_METADATA_FILE,
-  candidateRuns, inWorkspace, orderRuns, parseCandidates, parseCoverage, parseFindings, parseMetadata,
-  type AuditCandidate, type AuditFileName, type AuditListing, type AuditMetadata, type AuditRunRef,
-  type CandidatesSummary, type CoverageSummary, type FindingsSummary,
+  CANDIDATES_FILE, CONTROL_FILE, COVERAGE_LEDGER_FILE, FINDINGS_DETAIL_FILE, FINDINGS_FILE, NEEDS_VALIDATION_FILE,
+  REPORT_FILE, RUNS_DIRECTORY, RUN_METADATA_FILE,
+  candidateRuns, inWorkspace, orderRuns, parseCandidates, parseControl, parseCoverage, parseFindings, parseMetadata,
+  type AuditCandidate, type AuditControl, type AuditDocumentName, type AuditFileName, type AuditListing,
+  type AuditMetadata, type AuditRunRef,
+  type AuditRunStatus, type AuditStage, type CandidatesSummary, type CoverageSummary, type FindingsSummary,
+  type ReportDocuments,
 } from './runs.ts'
 
 /** How long a burst of watch frames waits before the run is read again. */
@@ -24,15 +27,41 @@ const WATCH_DEBOUNCE_MS = 150
 /** How often the elapsed time advances while a run is in progress. */
 const CLOCK_MS = 10_000
 
+/** How many settled units pass before the run writes another digest line. */
+const UNITS_PER_DIGEST = 5
+
+/** How many digest lines one run keeps; older lines fall off the front. */
+const DIGEST_LIMIT = 12
+
 /** What the pane is doing with the selected run. */
 export type AuditPhase = 'loading' | 'ready' | 'empty' | 'failed'
 
 /** Why one shared file could not be used on this read. */
 export type AuditFileReason = 'malformed' | 'truncated' | 'unreadable'
 
+/** One digest line: what the run had reached when the line was written. */
+export interface AuditDigest {
+  /** The phase the run had reached. */
+  readonly stage: AuditStage
+  /** The lifecycle state at that moment. */
+  readonly status: AuditRunStatus
+  /** Units covered at that moment. */
+  readonly covered: number
+  /** Units the run planned to cover. */
+  readonly total: number
+  /** Agent invocations spent at that moment. */
+  readonly spend: number | undefined
+  /** The budget in force, or `null` when the run sets none. */
+  readonly budget: number | null | undefined
+  /** What moved: the phase, or a run of settled units. */
+  readonly kind: 'stage' | 'units'
+  /** When the line was written, in epoch milliseconds. */
+  readonly at: number
+}
+
 /** One reason the pane shows a quiet notice. */
 export type AuditProblem =
-  | { readonly kind: 'file'; readonly file: AuditFileName; readonly reason: AuditFileReason }
+  | { readonly kind: 'file'; readonly file: AuditFileName | AuditDocumentName | typeof CONTROL_FILE; readonly reason: AuditFileReason }
   | { readonly kind: 'directory'; readonly directory: string }
   | { readonly kind: 'watch' }
   | { readonly kind: 'workspace' }
@@ -40,6 +69,12 @@ export type AuditProblem =
 /** Everything the body renders. */
 export interface AuditSnapshot {
   readonly phase: AuditPhase
+  /** The digest lines written so far, oldest first. */
+  readonly digests: readonly AuditDigest[]
+  /** The report documents, or the last good value while a read fails. */
+  readonly report: ReportDocuments | undefined
+  /** The control a person last asked of the run, when the run directory records one. */
+  readonly control: AuditControl | undefined
   /** Every discovered run, newest first. */
   readonly runs: readonly AuditRunRef[]
   /** The selected run's workspace-relative directory. */
@@ -95,7 +130,8 @@ export interface AuditControllerDeps extends AuditFileAccess {
 
 /** The snapshot before anything was discovered. */
 const INITIAL: AuditSnapshot = {
-  phase: 'loading', runs: [], selected: undefined, metadata: undefined, coverage: undefined,
+  phase: 'loading', digests: [], report: undefined, control: undefined,
+  runs: [], selected: undefined, metadata: undefined, coverage: undefined,
   candidates: undefined, findings: undefined, elapsedMs: undefined, problems: [], busy: false,
 }
 
@@ -139,6 +175,8 @@ export class SecurityAuditController {
     coverage?: CoverageSummary
     candidates?: CandidatesSummary
     findings?: FindingsSummary
+    report?: ReportDocuments
+    control?: AuditControl
   } = {}
 
   private used = 0
@@ -165,6 +203,11 @@ export class SecurityAuditController {
   private elapsedMs: number | undefined
   private problems: readonly AuditProblem[] = []
   private busy = false
+  private digests: readonly AuditDigest[] = []
+  private report: ReportDocuments | undefined
+  private control: AuditControl | undefined
+  private digestStage: AuditStage | undefined
+  private digestDone = 0
 
   /** @param deps - the workspace root, the file access, and the clock. */
   constructor(deps: AuditControllerDeps) {
@@ -191,6 +234,14 @@ export class SecurityAuditController {
         this.stopClock()
       }
     }
+  }
+
+  /**
+   * The run the pane shows, which its control commands name.
+   * @returns the workspace-relative run directory, or `undefined` before one is selected.
+   */
+  directory(): string | undefined {
+    return this.selected
   }
 
   /** Discover the runs again and read the selected one again. */
@@ -303,11 +354,15 @@ export class SecurityAuditController {
     }
     this.busy = true
     this.publish()
-    const [metadata, coverage, candidates, findings] = await Promise.all([
+    const [metadata, coverage, candidates, findings, report, detail, needsValidation, control] = await Promise.all([
       this.readParsed(inWorkspace(cwd, `${directory}/${RUN_METADATA_FILE}`), abort.signal, parseMetadata),
       this.readParsed(inWorkspace(cwd, `${directory}/${COVERAGE_LEDGER_FILE}`), abort.signal, parseCoverage),
       this.readParsed(inWorkspace(cwd, `${directory}/${CANDIDATES_FILE}`), abort.signal, parseCandidates),
       this.readParsed(inWorkspace(cwd, `${directory}/${FINDINGS_FILE}`), abort.signal, parseFindings),
+      this.readDocument(inWorkspace(cwd, `${directory}/${REPORT_FILE}`), abort.signal),
+      this.readDocument(inWorkspace(cwd, `${directory}/${FINDINGS_DETAIL_FILE}`), abort.signal),
+      this.readDocument(inWorkspace(cwd, `${directory}/${NEEDS_VALIDATION_FILE}`), abort.signal),
+      this.readParsed(inWorkspace(cwd, `${directory}/${CONTROL_FILE}`), abort.signal, parseControl),
     ])
     if (this.disposed || generation !== this.readGeneration) return
     const problems: AuditProblem[] = this.problems.filter(problem => problem.kind !== 'file')
@@ -320,6 +375,10 @@ export class SecurityAuditController {
       [COVERAGE_LEDGER_FILE, coverage],
       [CANDIDATES_FILE, candidates],
       [FINDINGS_FILE, findings],
+      [REPORT_FILE, report],
+      [FINDINGS_DETAIL_FILE, detail],
+      [NEEDS_VALIDATION_FILE, needsValidation],
+      [CONTROL_FILE, control],
     ] as const) {
       if (read.kind === 'invalid') problems.push({ kind: 'file', file, reason: read.reason })
     }
@@ -327,8 +386,19 @@ export class SecurityAuditController {
     this.coverage = coverage.kind === 'ok' ? coverage.value : this.lastGood.coverage
     this.candidates = candidates.kind === 'ok' ? candidates.value : this.lastGood.candidates
     this.findings = findings.kind === 'ok' ? findings.value : this.lastGood.findings
+    if (report.kind === 'ok' || detail.kind === 'ok' || needsValidation.kind === 'ok') {
+      this.lastGood.report = {
+        report: report.kind === 'ok' ? report.value : this.lastGood.report?.report,
+        detail: detail.kind === 'ok' ? detail.value : this.lastGood.report?.detail,
+        needsValidation: needsValidation.kind === 'ok' ? needsValidation.value : this.lastGood.report?.needsValidation,
+      }
+    }
+    if (control.kind === 'ok') this.lastGood.control = control.value
+    this.report = this.lastGood.report
+    this.control = control.kind === 'ok' ? control.value : this.lastGood.control
     this.problems = problems
     this.elapsedMs = elapsedOf(this.metadata, this.deps.now?.() ?? Date.now())
+    this.noteDigest(this.deps.now?.() ?? Date.now())
     this.phase = 'ready'
     this.busy = false
     this.publish()
@@ -362,6 +432,11 @@ export class SecurityAuditController {
     delete this.lastGood.coverage
     delete this.lastGood.candidates
     delete this.lastGood.findings
+    delete this.lastGood.report
+    delete this.lastGood.control
+    this.digests = []
+    this.digestStage = undefined
+    this.digestDone = 0
     this.resetRun()
   }
 
@@ -371,7 +446,56 @@ export class SecurityAuditController {
     this.coverage = undefined
     this.candidates = undefined
     this.findings = undefined
+    this.report = undefined
+    this.control = undefined
     this.elapsedMs = undefined
+  }
+
+  /**
+   * Read one report document verbatim; a missing document is an empty one.
+   * @param path - its absolute path.
+   * @param signal - caller cancellation.
+   * @returns the text, or why the read could not use the file.
+   */
+  private async readDocument(path: string, signal: AbortSignal): Promise<ReadFile<string | undefined>> {
+    const result = await this.deps.read(path, signal)
+    if (!result.ok) {
+      return result.error.code === 'workspace-file/not-found'
+        ? { kind: 'ok', value: undefined }
+        : { kind: 'invalid', reason: 'unreadable' }
+    }
+    if (!result.value.eof) return { kind: 'invalid', reason: 'truncated' }
+    return { kind: 'ok', value: result.value.text }
+  }
+
+  /**
+   * Write a digest line when the phase moved or a few units settled. The first
+   * read only seeds the comparison, so opening an old run writes nothing.
+   * @param now - the current time.
+   */
+  private noteDigest(now: number): void {
+    const stage = this.metadata?.stage ?? 'unknown'
+    const done = (this.coverage?.covered ?? 0) + (this.coverage?.deferred ?? 0) + (this.coverage?.blocked ?? 0)
+    if (this.digestStage === undefined) {
+      this.digestStage = stage
+      this.digestDone = done
+      return
+    }
+    const moved = stage !== this.digestStage
+    if (!moved && done - this.digestDone < UNITS_PER_DIGEST) return
+    this.digestStage = stage
+    this.digestDone = done
+    const line: AuditDigest = {
+      stage,
+      status: this.metadata?.status ?? 'unknown',
+      covered: this.coverage?.covered ?? 0,
+      total: this.coverage?.total ?? 0,
+      spend: this.metadata?.spend,
+      budget: this.metadata?.budget,
+      kind: moved ? 'stage' : 'units',
+      at: now,
+    }
+    this.digests = [...this.digests, line].slice(-DIGEST_LIMIT)
   }
 
   /**
@@ -465,6 +589,9 @@ export class SecurityAuditController {
   private publish(): void {
     this.state.set({
       phase: this.phase,
+      digests: this.digests,
+      report: this.report,
+      control: this.control,
       runs: this.runs,
       selected: this.selected,
       metadata: this.metadata,

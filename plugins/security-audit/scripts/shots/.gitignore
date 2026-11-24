@@ -1,0 +1,3 @@
+# The harness bundle and the app stylesheet it borrows are build output.
+out/
+app.css

@@ -26,6 +26,24 @@ export const CANDIDATES_FILE = 'candidates.json'
 /** The structured record of what validation settled. */
 export const FINDINGS_FILE = 'findings.json'
 
+/** The coordinator's report, as a person reads it. */
+export const REPORT_FILE = 'REPORT.md'
+
+/** Every confirmed finding written out in full. */
+export const FINDINGS_DETAIL_FILE = 'FINDINGS-DETAIL.md'
+
+/** The records a run could not settle, each with the check that would settle it. */
+export const NEEDS_VALIDATION_FILE = 'NEEDS-VALIDATION.md'
+
+/** The coordinator's answer to a control request: pause, resume or stop. */
+export const CONTROL_FILE = 'control.json'
+
+/** The run's derived progress, written on every ledger change. */
+export const PROGRESS_FILE = 'progress.json'
+
+/** The report documents the pane reads verbatim. */
+export type AuditDocumentName = typeof REPORT_FILE | typeof FINDINGS_DETAIL_FILE | typeof NEEDS_VALIDATION_FILE
+
 /** The shared run files the pane reads, in the order it reads them. */
 export type AuditFileName =
   | typeof RUN_METADATA_FILE
@@ -145,6 +163,19 @@ function textField(value: unknown): string | undefined {
 }
 
 /**
+ * Read one field holding a list of non-empty strings.
+ * @param value - the field's value.
+ * @returns its strings, or an empty list for any other value.
+ */
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(entry => {
+    const text = textField(entry)
+    return text === undefined ? [] : [text]
+  })
+}
+
+/**
  * Read one timestamp field.
  * @param value - the field's value.
  * @returns epoch milliseconds, or `undefined` when the field is not a parseable timestamp.
@@ -186,6 +217,8 @@ export interface AuditMetadata {
   readonly runId: string | undefined
   /** The audited repository's name. */
   readonly repo: string | undefined
+  /** The repository-relative paths the run scoped itself to; empty for the whole target. */
+  readonly scopePaths: readonly string[]
   /** The audit profile: quick, standard or deep. */
   readonly profile: string | undefined
   /** When the coordinator may interrupt: straight_through, after_recon or every_stage. */
@@ -297,6 +330,7 @@ export function parseMetadata(raw: string): AuditMetadata | undefined {
   return {
     runId: textField(record.run_id),
     repo: textField(record.repo),
+    scopePaths: stringList(record.scope_paths),
     profile: textField(record.profile),
     checkIn: textField(record.check_in),
     budget,
@@ -330,6 +364,10 @@ export interface CoverageUnit {
   readonly id: string
   /** What the unit covers, as a readable surface and attack class. */
   readonly label: string
+  /** The entry surface, as the ledger writes it. */
+  readonly surface: string
+  /** The trust boundary the unit sits on, when the ledger records one. */
+  readonly boundary: string | undefined
   /** The unit's state. */
   readonly status: CoverageStatus
   /** The role that owns it, when one does. */
@@ -362,6 +400,8 @@ export interface CoverageSummary {
   readonly byStatus: Readonly<Record<CoverageStatus, number>>
   /** The units a role owns now: in progress first, then candidates, in ledger order. */
   readonly active: readonly CoverageUnit[]
+  /** Every readable unit, in ledger order, which the coverage map groups by boundary. */
+  readonly units: readonly CoverageUnit[]
   /** Array entries that were not readable units. */
   readonly skipped: number
 }
@@ -404,6 +444,8 @@ function unitOf(record: JsonObject, index: number): CoverageUnit | undefined {
   return {
     id,
     label: unitLabel(record, id),
+    surface: textField(record.surface) ?? id,
+    boundary: textField(record.boundary),
     status,
     owner: textField(record.agent_id),
     wave: numberField(record.wave),
@@ -453,6 +495,7 @@ export function parseCoverage(raw: string): CoverageSummary | undefined {
     inProgress: byStatus.in_progress,
     byStatus,
     active,
+    units,
     skipped,
   }
 }
@@ -468,6 +511,20 @@ export interface FindingCitation {
   readonly line: number | undefined
 }
 
+/**
+ * The focused test that proves a high or critical finding, with the file it sits
+ * in and the assertion it makes. A test the finding's role could run in its own
+ * copy is proven; one nobody ran is a proposal, and reads as one.
+ */
+export interface AuditDenialTest {
+  /** The repository-relative test file, when the record names one. */
+  readonly file: string | undefined
+  /** The assertion the test makes. */
+  readonly assertion: string | undefined
+  /** Whether the record says the test was run, rather than proposed. */
+  readonly proven: boolean
+}
+
 /** One record the pane lists. */
 export interface AuditFinding {
   /** What validation settled on. */
@@ -476,10 +533,22 @@ export interface AuditFinding {
   readonly fingerprint: string | undefined
   /** The record's title. */
   readonly title: string
+  /** The record's own one-line statement of the flaw, when it writes one. */
+  readonly summary: string | undefined
+  /** The trust boundary the record names as affected, when it names one. */
+  readonly boundary: string | undefined
   /** The confirmed record's overall severity; absent for the other verdicts. */
   readonly severity: string | undefined
   /** The distinct source lines the record cites, trace and evidence together. */
   readonly citations: readonly FindingCitation[]
+  /** The proof that the boundary holds, for a high or critical confirmed record. */
+  readonly denialTest: AuditDenialTest | undefined
+  /** What a needs-validation record could not settle, in its own words. */
+  readonly blockers: readonly string[]
+  /** The smallest check that would settle a needs-validation record. */
+  readonly nextStep: string | undefined
+  /** The record as the file writes it, which the card expands to. */
+  readonly record: Readonly<Record<string, unknown>>
 }
 
 /** The counts and records the pane shows for one findings file. */
@@ -548,6 +617,46 @@ function severityOf(record: JsonObject): string | undefined {
 }
 
 /**
+ * The first sentence of a description, which the report card shows as its one line.
+ * @param description - the record's description.
+ * @returns the sentence, or `undefined` when the text is empty.
+ */
+function firstSentence(description: string | undefined): string | undefined {
+  if (description === undefined) return undefined
+  const text = description.replace(/\s+/gu, ' ').trim()
+  if (text === '') return undefined
+  const end = /\.(?:\s|$)/u.exec(text)
+  return end === null ? text : text.slice(0, end.index + 1)
+}
+
+/**
+ * Read a confirmed record's denial test.
+ * @param record - the findings record.
+ * @returns the test, or `undefined` when the record carries none.
+ */
+function denialTestOf(record: JsonObject): AuditDenialTest | undefined {
+  const value = jsonObject(record.denial_test)
+  if (value === undefined) return undefined
+  return {
+    file: textField(value.file),
+    assertion: textField(value.assertion),
+    proven: value.proven === true || value.status === 'proven',
+  }
+}
+
+/**
+ * Read a needs-validation record's suggested check: the local one first, because
+ * it is the check the person can make.
+ * @param record - the findings record.
+ * @returns the check, or `undefined` when the record plans none.
+ */
+function nextStepOf(record: JsonObject): string | undefined {
+  const plan = jsonObject(record.validation_plan)
+  if (plan === undefined) return undefined
+  return textField(plan.local) ?? textField(plan.deployment)
+}
+
+/**
  * Read one findings record, defensively: an unknown verdict or a missing title
  * leaves the entry out and the caller reports it as unreadable.
  * @param record - the array entry.
@@ -561,8 +670,14 @@ function findingOf(record: JsonObject): AuditFinding | undefined {
     verdict,
     fingerprint: textField(record.fingerprint),
     title,
+    summary: firstSentence(textField(record.description)),
+    boundary: textField(record.boundary),
     severity: verdict === 'confirmed' ? severityOf(record) : undefined,
     citations: citationsOf(record),
+    denialTest: verdict === 'confirmed' ? denialTestOf(record) : undefined,
+    blockers: verdict === 'needs_validation' ? stringList(record.blockers) : [],
+    nextStep: verdict === 'needs_validation' ? nextStepOf(record) : undefined,
+    record,
   }
 }
 
@@ -677,6 +792,42 @@ export function parseCandidates(raw: string): CandidatesSummary | undefined {
     else if (status === 'rejected') counts.rejected += 1
   }
   return { total, ...counts, pending, skipped }
+}
+
+/** What a person asked the run's coordinator to do. */
+export type AuditControlCommand = 'pause' | 'resume' | 'stop'
+
+/** The control a person asked of one run, as its directory records it. */
+export interface AuditControl {
+  /** The command in force. */
+  readonly command: AuditControlCommand
+  /** Why it was asked, when the person gave a reason. */
+  readonly reason: string | undefined
+  /** When it was asked, in epoch milliseconds. */
+  readonly at: number | undefined
+}
+
+/**
+ * Parse `control.json`.
+ * @param raw - the file's text.
+ * @returns the control, or `undefined` when the file names no known command.
+ */
+export function parseControl(raw: string): AuditControl | undefined {
+  const record = jsonObject(parseJson(raw))
+  if (record === undefined) return undefined
+  const command = record.command
+  if (command !== 'pause' && command !== 'resume' && command !== 'stop') return undefined
+  return { command, reason: textField(record.reason), at: timestampField(record.at) }
+}
+
+/** The report's Markdown documents, as the run directory holds them. */
+export interface ReportDocuments {
+  /** `REPORT.md`, the report a person reads. */
+  readonly report: string | undefined
+  /** `FINDINGS-DETAIL.md`, every confirmed finding in full. */
+  readonly detail: string | undefined
+  /** `NEEDS-VALIDATION.md`, the records the run could not settle. */
+  readonly needsValidation: string | undefined
 }
 
 /**

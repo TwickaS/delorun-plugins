@@ -16,6 +16,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { Config } from './config.ts'
 import type { Config as ConfigShape } from './config.ts'
 import { resolveConfig } from './config.ts'
+import { registerControlCommands } from './controls.ts'
 import { registerDelegationTool } from './delegate.ts'
 import { registerAuditTools } from './tools/index.ts'
 
@@ -26,7 +27,7 @@ export type { Config as SecurityAuditConfig, Mount, RoleModelOverride } from './
 export const name = 'delorun-plugin-security-audit'
 
 /** The services every mounted row needs; the sandbox services are looked up at use. */
-export const inject = ['tools', 'fs', 'systemPrompt']
+export const inject = ['tools', 'fs', 'systemPrompt', 'commands']
 
 /** The coordinator's prompt section, after the harness's own sections. */
 const ROLE_ORDER = 700
@@ -52,4 +53,5 @@ export function apply(ctx: Context, raw: ConfigShape): void {
   ctx.systemPrompt.section({ name: 'security-audit:coordinator', order: ROLE_ORDER, text: COORDINATOR_PROMPT })
   registerAuditTools(ctx, config)
   registerDelegationTool(ctx, config)
+  ctx.effect(() => registerControlCommands(ctx), 'security-audit: run control commands')
 }
