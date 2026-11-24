@@ -74,12 +74,13 @@ export const FINDINGS_DETAIL_FILE = 'FINDINGS-DETAIL.md'
 /** The findings that need a check the audit could not make. */
 export const NEEDS_VALIDATION_FILE = 'NEEDS-VALIDATION.md'
 
-/** The seven files a run's report is built from, in the order a reader takes them. */
+/** The eight files a run's report is built from, in the order a reader takes them. */
 export const SHARED_RUN_FILES: readonly SharedRunFile[] = [
   RUN_METADATA_FILE,
   ARCHITECTURE_FILE,
   COVERAGE_LEDGER_FILE,
   FINDINGS_FILE,
+  DENIALS_FILE,
   REPORT_FILE,
   FINDINGS_DETAIL_FILE,
   NEEDS_VALIDATION_FILE,

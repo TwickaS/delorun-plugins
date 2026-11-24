@@ -1,8 +1,9 @@
 /**
  * `audit_init`: the intake. It settles the target, the profile, the budget and
  * the confinement facts, creates the run directory and its seven shared files,
- * and refuses to start when a control the skill requires is missing, naming the
- * setting to change rather than assuming it. Every check it makes is recorded in
+ * seeds the candidate store and the denial-test file empty, and refuses to start
+ * when a control the skill requires is missing, naming the setting to change
+ * rather than assuming it. Every check it makes is recorded in
  * `run-metadata.json`, so the run states its own boundary.
  * @module delorun-plugin-security-audit/tools/init
  */
@@ -20,6 +21,7 @@ import { targetOf } from '../run-context.ts'
 import {
   ARCHITECTURE_FILE,
   CANDIDATES_FILE,
+  DENIALS_FILE,
   STATE_FILE,
   coordinatingSession,
   coordinatorRun,
@@ -222,6 +224,7 @@ export function registerInitTool(ctx: Context, config: Config): void {
       await writeLedger(files, run, seeding.units)
       await writeFindings(files, run, [])
       await files.writeJson(inRun(run, CANDIDATES_FILE), [])
+      await files.writeJson(inRun(run, DENIALS_FILE), [])
       await writeRunMetadata(files, run, state, [], [])
       rememberCoordinatorRun(session.id, run)
       const next = gateway.ok

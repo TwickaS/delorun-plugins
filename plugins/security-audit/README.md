@@ -107,6 +107,7 @@ A run lives in `<workspace>/.security-audit/run-<N>/`, where `<N>` is the next u
 | `architecture.md` | The target's principals, resources, entry surfaces, controls and starting paths, in about 1,000 words |
 | `coverage-ledger.json` | One unit per surface × boundary × subsystem × attack class, with its status, owner, reviewed paths, checks, result fingerprints and unresolved facts |
 | `findings.json` | Every confirmed, needs-validation and rejected record |
+| `denial-tests.json` | The denial test each high or critical finding carries, keyed by fingerprint |
 | `REPORT.md` | The report, written last |
 | `FINDINGS-DETAIL.md` | One section for each confirmed finding |
 | `NEEDS-VALIDATION.md` | One section for each blocked hypothesis and the check that settles it |

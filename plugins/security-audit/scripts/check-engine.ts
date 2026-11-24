@@ -20,6 +20,7 @@ import {
   type HunterUnitResult,
   type UnitSeed,
 } from '../src/ledger.ts'
+import { denialProblems, denialTestProblems } from '../src/denials.ts'
 import { resultProblems, type GateContext } from '../src/gate.ts'
 import { expectedFingerprints, findingsProblems, reportProblems } from '../src/report.ts'
 import { rcSeedUnits } from '../src/rc-profile.ts'
@@ -101,6 +102,39 @@ const hunterValue = {
 assert.deepEqual(resultProblems('hunt', hunterValue, context), [])
 assert.deepEqual(resultProblems('hunt', { ...hunterValue, units: [] }, context).length, 1)
 assert.ok(resultProblems('verify', { decision: 'confirmed', record: { ...RECORD, verdict: 'confirmed' }, checks: [] }, context).length > 0)
+
+// The denial-test rule. A confirmed record's severity is the schema's object, so the gate must read it through
+// overallSeverityOf: reading `record.severity` as a string matched nothing and let every high or critical finding
+// through without a test. Each case below is a record the skill's own validator accepts.
+const CONFIRMED = {
+  verdict: 'confirmed',
+  fingerprint: 'router-owner-bypass',
+  title: 'Owner check trusts a header',
+  description: 'The owner check reads a caller-supplied header.',
+  root_cause: 'requireOwner compares a header with the owner column.',
+  intended_behavior: 'Only the owner reads the item.',
+  trace: [{ kind: 'entrypoint', file: 'src/router.ts', line: 12, scope: 'GET /items/:id', description: 'route entry' }],
+  evidence: [{ file: 'src/authz.ts', line: 7, description: 'header read' }],
+  conditions: [{ kind: 'authentication_level', description: 'the caller is signed in' }],
+  execution: { attacker_perspective: 'a signed-in non-owner', payloads: ['X-Owner: 1'], instructions: ['send the header'], observed_result: 'the item is returned' },
+  remediation: { strategy: 'compare the session user with the owner column' },
+  severity: { likelihood: { score: 'high', reason: 'any signed-in caller' }, impact: { score: 'high', reason: 'reads another account' }, overall_severity: 'high' },
+  confidence: { score: 'high', reason: 'the trace is complete' },
+}
+assert.deepEqual(findingsProblems([CONFIRMED]), [], 'the confirmed fixture is schema-valid')
+const DENIAL = { fingerprint: 'router-owner-bypass', file: 'src/authz.spec.ts', name: 'refuses a foreign owner header', assertion: 'the response is 403', state: 'proven' as const, observed: '403 before the fix, 200 after' }
+// A high or critical finding with no test is refused, and the severity is read from the schema's object.
+assert.equal(denialProblems([CONFIRMED], []).length, 1, 'a high finding with no denial test is refused')
+assert.equal(denialProblems([{ ...CONFIRMED, severity: { ...CONFIRMED.severity, overall_severity: 'critical' } }], []).length, 1, 'a critical finding with no denial test is refused')
+assert.deepEqual(denialProblems([CONFIRMED], [DENIAL]), [], 'the same finding passes once its test is recorded')
+// A severity below high needs no test, and a test naming no record is a problem.
+assert.deepEqual(denialProblems([{ ...CONFIRMED, severity: { ...CONFIRMED.severity, overall_severity: 'medium' } }], []), [], 'a medium finding needs no denial test')
+assert.equal(denialProblems([CONFIRMED], [DENIAL, { ...DENIAL, fingerprint: 'gone' }]).length, 1, 'a test naming no record is refused')
+assert.equal(denialProblems([CONFIRMED], [DENIAL, { ...DENIAL, name: 'other' }]).length, 1, 'two tests for one finding are refused')
+// A test is only usable when it states what it proves.
+assert.deepEqual(denialTestProblems(DENIAL), [], 'a proven test with an observation is usable')
+assert.equal(denialTestProblems({ ...DENIAL, observed: undefined }).length, 1, 'a proven test without an observation is refused')
+assert.equal(denialTestProblems({ ...DENIAL, assertion: '' }).length, 1, 'a test without an assertion is refused')
 
 // The findings document and the report's fingerprint footer.
 assert.deepEqual(findingsProblems([RECORD]), [])

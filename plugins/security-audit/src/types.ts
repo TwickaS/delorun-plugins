@@ -706,12 +706,13 @@ export interface RunLocation {
   readonly dir: string
 }
 
-/** The seven files the coordinator writes that the audit's report is built from. */
+/** The eight files the coordinator writes that the audit's report is built from. */
 export type SharedRunFile =
   | 'run-metadata.json'
   | 'architecture.md'
   | 'coverage-ledger.json'
   | 'findings.json'
+  | 'denial-tests.json'
   | 'REPORT.md'
   | 'FINDINGS-DETAIL.md'
   | 'NEEDS-VALIDATION.md'
