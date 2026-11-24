@@ -17,6 +17,7 @@ import {
   COVERAGE_LEDGER_FILE,
   FINDINGS_FILE,
   REPORT_FILES,
+  SHARED_RUN_FILES,
   RUN_METADATA_FILE,
   inRun,
   now,
@@ -24,8 +25,8 @@ import {
 
 export { REPORT_FILES } from './store.ts'
 
-/** Every file the coordinator writes at the run root. */
-export const EXPORT_FILES: readonly string[] = [RUN_METADATA_FILE, ARCHITECTURE_FILE, COVERAGE_LEDGER_FILE, FINDINGS_FILE, CANDIDATES_FILE, ...Object.values(REPORT_FILES)]
+/** Every file the coordinator writes at the run root: the seven shared files and its own candidate store. */
+export const COORDINATOR_FILES: readonly string[] = [...SHARED_RUN_FILES, CANDIDATES_FILE]
 
 /** The machine-readable footer every report document carries. */
 export const FINGERPRINT_FOOTER = /<!--\s*audit-fingerprints:\s*([^>]*?)\s*-->/u
@@ -168,7 +169,7 @@ export function runMetadata(state: HarnessState, ledger: readonly LedgerUnit[], 
     execution: state.execution,
     selected_companion_files: companionFiles,
     prior_runs: state.prior_runs,
-    shared_file_owners: Object.fromEntries(EXPORT_FILES.map(name => [name, 'coordinator' as const])),
+    shared_file_owners: Object.fromEntries(SHARED_RUN_FILES.map(name => [name, 'coordinator' as const])),
     candidates: {
       total: candidates.length,
       proposed: candidates.filter(candidate => candidate.status === 'proposed').length,
