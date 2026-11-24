@@ -10,8 +10,13 @@
  */
 import type { SandboxEnforcement, SandboxMode, SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 
-/** The coverage profile the skill defines: how finely units split, and how many waves run. */
-export type AuditProfile = 'quick' | 'standard' | 'deep'
+/**
+ * The coverage profile: how finely units split, and how many waves run.
+ *
+ * `quick`, `standard` and `deep` are the skill's own profiles. `rc` is the release-candidate profile: it seeds the
+ * ledger from the boundaries of Delorun's threat model and otherwise runs with `deep`'s settings.
+ */
+export type AuditProfile = 'quick' | 'standard' | 'deep' | 'rc'
 
 /**
  * When the coordinator stops for a person's answer during an unattended run.

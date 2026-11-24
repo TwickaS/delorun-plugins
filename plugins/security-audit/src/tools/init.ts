@@ -13,6 +13,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { budgetSummary, proposeBudget, reconnaissanceGate, reservationFor } from '../budget.ts'
 import type { Config } from '../config.ts'
+import { seedUnits } from '../ledger.ts'
+import { rcSeedUnits } from '../rc-profile.ts'
 import { writeFindings, writeLedger, writeRunMetadata } from '../report.ts'
 import { targetOf } from '../run-context.ts'
 import {
@@ -32,7 +34,7 @@ import {
   runNumber,
   runsRoot,
 } from '../store.ts'
-import type { HarnessState, RunLocation } from '../types.ts'
+import type { CoverageSeed, HarnessState, LedgerUnit, RunLocation } from '../types.ts'
 import {
   countSourceFiles,
   estimatedUnits,
@@ -45,9 +47,24 @@ import {
   roleModelsJson,
 } from './intake.ts'
 
-const PROFILE = ['quick', 'standard', 'deep'] as const
+const PROFILE = ['quick', 'standard', 'deep', 'rc'] as const
 const CHECK_IN = ['straight_through', 'after_recon', 'every_stage'] as const
 const SEED = ['reconnaissance', 'rc'] as const
+
+/**
+ * The list that seeds the ledger, and the units it starts from.
+ * @param profile - the run's profile.
+ * @param seed - the seed the caller asked for, or `undefined`.
+ * @returns the seed and its units; a reconnaissance seed starts from no unit.
+ * @throws {Error} when the rc profile and a seed other than `rc` are asked for together.
+ */
+function resolveSeed(profile: (typeof PROFILE)[number], seed: CoverageSeed | undefined): { readonly seed: CoverageSeed; readonly units: readonly LedgerUnit[] } {
+  if (profile === 'rc') {
+    if (seed !== undefined && seed !== 'rc') throw new Error("the rc profile seeds Delorun's threat-model boundaries; omit seed or set it to 'rc'")
+    return { seed: 'rc', units: seedUnits([], rcSeedUnits()).ledger }
+  }
+  return { seed: seed ?? 'reconnaissance', units: [] }
+}
 
 /**
  * The fewest agent calls a profile needs: four reconnaissance roles, its
@@ -91,8 +108,8 @@ export function registerInitTool(ctx: Context, config: Config): void {
     presentResult: () => ({ card: 'generic', title: 'Start security audit' }),
     description: 'Create a security-audit run in this workspace: settle the intake, check the confinement facts the skill requires, write the run directory and its seven shared files, and record the source revision. Call this once before any other audit tool.',
     parameters: {
-      profile: { type: 'string', enum: [...PROFILE], description: 'The skill profile. Default standard.' },
-      seed: { type: 'string', enum: [...SEED], description: 'Which list seeds the ledger: reconnaissance derives units as the skill specifies, rc uses the release-candidate boundaries from the threat model. Default reconnaissance.' },
+      profile: { type: 'string', enum: [...PROFILE], description: "The coverage profile. Default standard. 'rc' is the release-candidate profile: it seeds one coverage unit for each boundary of Delorun's threat model and otherwise runs with the deep profile's settings." },
+      seed: { type: 'string', enum: [...SEED], description: 'Which list seeds the ledger: reconnaissance derives units as the skill specifies, rc uses the release-candidate boundaries from the threat model. Defaults to rc for the rc profile and reconnaissance otherwise.' },
       scope_paths: { type: 'array', items: { type: 'string' }, description: 'Repository-relative directories this run audits. Omit for the whole repository.' },
       budget: { type: 'integer', description: 'Maximum agent invocations across all phases. Omit to have the run propose one from the target size.' },
       check_in: { type: 'string', enum: [...CHECK_IN], description: 'When the coordinator may interrupt an unattended run. Default straight_through.' },
@@ -129,6 +146,7 @@ export function registerInitTool(ctx: Context, config: Config): void {
       if (args.budget !== undefined && args.budget < minimumBudget(profile)) {
         throw new Error('a ' + profile + ' audit needs at least ' + String(minimumBudget(profile)) + ' invocations to fund four reconnaissance roles, its critic reserve and one verifier; raise the budget, narrow the scope or use a coarser profile')
       }
+      const seeding = resolveSeed(profile, args.seed)
       if (exec.agent === undefined) throw new Error('the audit tools need an owning agent session')
       const agent: Agent = exec.agent
       const files = filesFor(ctx, agent, exec.signal)
@@ -158,7 +176,8 @@ export function registerInitTool(ctx: Context, config: Config): void {
       const sandbox = await intakeSandbox(ctx, exampleRoleCwd(run), exec.signal)
       const models = roleModels(args.models)
       const counted = await countSourceFiles(files, target, args.scope_paths ?? [])
-      const proposed = args.budget === undefined ? proposeBudget({ profile, units: estimatedUnits(counted) }) : undefined
+      const seededUnits = seeding.units.length > 0 ? seeding.units.length : estimatedUnits(counted)
+      const proposed = args.budget === undefined ? proposeBudget({ profile, units: seededUnits }) : undefined
       const budget = args.budget ?? proposed ?? null
       const gateway = reconnaissanceGate({ profile, budget, spent: 0 })
       const budgetNote = budgetSummary({ budget, gateway, proposed: proposed !== undefined }) ?? null
@@ -171,7 +190,7 @@ export function registerInitTool(ctx: Context, config: Config): void {
         repo_name: posix.basename(target),
         source_ref: await readSourceRef(target),
         profile,
-        seed: args.seed ?? 'reconnaissance',
+        seed: seeding.seed,
         scope_paths: [...args.scope_paths ?? []],
         check_in: args.check_in ?? 'straight_through',
         intake_note: args.note ?? null,
@@ -198,13 +217,15 @@ export function registerInitTool(ctx: Context, config: Config): void {
       }
       await files.writeJson(inRun(run, STATE_FILE), state, true)
       await files.write(inRun(run, ARCHITECTURE_FILE), '# Architecture summary\n\nPending reconnaissance for ' + state.repo_name + '.\n')
-      await writeLedger(files, run, [])
+      await writeLedger(files, run, seeding.units)
       await writeFindings(files, run, [])
       await files.writeJson(inRun(run, CANDIDATES_FILE), [])
       await writeRunMetadata(files, run, state, [], [])
       rememberCoordinatorRun(session.id, run)
       const next = gateway.ok
-        ? 'Load the skill with audit_skill, launch the four reconnaissance briefs in parallel with audit_delegate role=recon, then record the architecture and seed coverage units with audit_ledger.'
+        ? seeding.units.length > 0
+          ? 'Load the skill with audit_skill, launch the four reconnaissance briefs in parallel with audit_delegate role=recon, then record the architecture with audit_architecture. The ledger already holds one unit for each of the ' + String(seeding.units.length) + " boundaries of Delorun's threat model: add with audit_ledger the units reconnaissance finds that the seed does not name."
+          : 'Load the skill with audit_skill, launch the four reconnaissance briefs in parallel with audit_delegate role=recon, then record the architecture and seed coverage units with audit_ledger.'
         : 'No reconnaissance agent may run: the budget cannot fund the four reconnaissance roles, this profile critic reserve and one verifier. Ask the person for a larger budget, a narrower scope or a coarser profile, then start a new run.'
       return {
         run_id: runId,

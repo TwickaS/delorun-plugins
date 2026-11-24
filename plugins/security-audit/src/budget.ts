@@ -23,12 +23,22 @@ export type BudgetReason =
   | 'quick_profile_final_critic'
 
 /**
+ * The profile whose settings a run uses. The release-candidate profile fixes what the ledger starts from, not how
+ * finely the work splits, so it takes `deep`'s settings.
+ * @param profile - the run's profile.
+ * @returns the profile whose settings apply.
+ */
+export function settingsProfile(profile: AuditProfile): Exclude<AuditProfile, 'rc'> {
+  return profile === 'rc' ? 'deep' : profile
+}
+
+/**
  * How many critic calls one hunter wave requires.
  * @param profile - the run's profile.
  * @returns the immediate post-wave critic calls and the distinct final-clean calls.
  */
 export function criticCalls(profile: AuditProfile): { readonly wave: number; readonly finalClean: number } {
-  return profile === 'quick' ? { wave: 1, finalClean: 0 } : { wave: 1, finalClean: 1 }
+  return settingsProfile(profile) === 'quick' ? { wave: 1, finalClean: 0 } : { wave: 1, finalClean: 1 }
 }
 
 /** Agent calls held back before hunting starts. */
@@ -55,7 +65,7 @@ export interface Reservation {
  */
 export function validationReserve(profile: AuditProfile, candidates: number | undefined, balance: number): number {
   if (candidates !== undefined && candidates > 0) {
-    return Math.max(1, candidates * (profile === 'deep' ? 2 : 1))
+    return Math.max(1, candidates * (settingsProfile(profile) === 'deep' ? 2 : 1))
   }
   return Math.max(1, Math.ceil(Math.max(0, balance) * 0.3))
 }
@@ -191,7 +201,7 @@ export function validationGate(input: { readonly budget: number | null; readonly
 export function proposeBudget(input: { readonly profile: AuditProfile; readonly units: number; readonly candidates?: number }): number {
   const hunters = Math.max(1, Math.ceil(input.units / 3))
   const waves = Math.max(1, Math.ceil(hunters / 4))
-  const critics = waves * (input.profile === 'quick' ? 1 : 2)
+  const critics = waves * (settingsProfile(input.profile) === 'quick' ? 1 : 2)
   const validation = Math.max(2, Math.ceil((input.candidates ?? hunters * 0.6) * 1.5))
   return BASELINE_RECONNAISSANCE + hunters + critics + validation
 }
