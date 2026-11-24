@@ -11,9 +11,7 @@
  */
 import { applyHunterResult, type HunterUnitResult, type LedgerCheck, type LedgerUnit, validateLedger } from './ledger.ts'
 import { findingsValidator, ledgerValidator, skillBlock, SkillReferenceError, REPORT_SCHEMA } from './skill.ts'
-
-/** What one delegated brief asks its agent to do. */
-export type BriefKind = 'recon' | 'hunt' | 'verify' | 'final-verify' | 'critique'
+import type { BriefKind } from './types.ts'
 
 /** The most problems one refusal lists. */
 const MAX_PROBLEMS = 40
@@ -227,8 +225,8 @@ export function resultProblems(kind: BriefKind, value: unknown, context: GateCon
     case 'hunt': problems = hunterProblems(value, context); break
     case 'verify': problems = verifierProblems(value, context); break
     case 'final-verify': problems = finalVerifierProblems(value, context); break
-    case 'critique': problems = criticProblems(value, context); break
+    case 'critique':
+    case 'final-critique': problems = criticProblems(value, context); break
   }
   return problems.slice(0, MAX_PROBLEMS)
 }
-

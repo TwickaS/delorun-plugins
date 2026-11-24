@@ -1,97 +1,36 @@
 /**
  * Deterministic coverage-ledger operations (RECONNAISSANCE.md, Deterministic
  * coverage ledger; HUNTING.md, Parent consolidation and Coverage-critic
- * waves). Each operation returns a new ledger and never mutates its input;
- * the caller writes the result only when the skill's own validator accepts
- * it, so an operation either applies completely or not at all.
+ * waves). Each operation returns a new ledger and never mutates its input; the
+ * caller writes the result only when the skill's own validator accepts it, so
+ * an operation either applies completely or not at all.
+ *
+ * The ledger's vocabulary lives in `types.ts`; this module re-exports it so a
+ * caller of a ledger operation imports one module.
  * @module @delorun/plugin-security-audit/ledger
  */
 import { ledgerValidator, skillBlock, SkillReferenceError } from './skill.ts'
+import type { HunterUnitResult, LedgerCheck, LedgerUnit, StatusCounts, UnitSeed, UnitStatus } from './types.ts'
 
-/** One check a unit records. */
-export interface LedgerCheck {
-  readonly agent_id: string
-  readonly reviewed_paths: readonly string[]
-  readonly invariant: string
-  readonly method: 'source' | 'local'
-  readonly result: string
-  readonly artifact: string | null
-}
-
-/** A unit's canonical references. */
-export interface CanonicalRefs {
-  readonly surface: string
-  readonly boundary: string
-  readonly subsystem: string
-  readonly attack_class: string
-  readonly lifecycle?: string
-}
-
-/** A unit's status. */
-export type UnitStatus = 'planned' | 'in_progress' | 'covered' | 'candidate' | 'blocked' | 'deferred' | 'out_of_scope' | 'not_applicable'
-
-/** One coverage unit; extra `harness_*` fields are bookkeeping outside the skill's semantic fields. */
-export interface LedgerUnit {
-  readonly coverage_id: string
-  readonly canonical_refs: CanonicalRefs
-  readonly surface: string
-  readonly boundary: string
-  readonly subsystem: string
-  readonly attack_class: string
-  readonly lifecycle?: string
-  readonly starting_paths: readonly string[]
-  readonly ordinary_attack_class_block: string | null
-  readonly selected_companion_blocks: readonly string[]
-  readonly excluded_blocks: readonly { readonly block: string; readonly reason: string }[]
-  readonly prior_status: string
-  readonly attempts: readonly Record<string, unknown>[]
-  readonly wave: number
-  readonly status: UnitStatus
-  readonly agent_id: string | null
-  readonly reviewed_paths: readonly string[]
-  readonly local_checks: readonly LedgerCheck[]
-  readonly result_fingerprints: readonly string[]
-  readonly unresolved: readonly string[]
-  readonly harness_hardening?: readonly string[]
-  /** Bookkeeping: the verifier's latest decision for a linked candidate. */
-  readonly harness_decision?: string
-}
-
-/** The fields a caller gives to seed a unit; the live state starts `planned`. */
-export interface UnitSeed {
-  readonly canonical_refs: CanonicalRefs
-  readonly surface: string
-  readonly boundary: string
-  readonly subsystem: string
-  readonly attack_class: string
-  readonly lifecycle?: string
-  readonly starting_paths: readonly string[]
-  readonly ordinary_attack_class_block: string | null
-  readonly selected_companion_blocks: readonly string[]
-  readonly excluded_blocks: readonly { readonly block: string; readonly reason: string }[]
-  readonly prior_status?: string
-}
-
-/** A hunter result's per-unit entry. */
-export interface HunterUnitResult {
-  readonly coverage_id: string
-  readonly disposition: 'covered' | 'candidate' | 'blocked'
-  readonly reviewed_paths: readonly string[]
-  readonly checks: readonly LedgerCheck[]
-  readonly candidate_fingerprints: readonly string[]
-  readonly unresolved: readonly string[]
-}
+export type { CanonicalRefs, ExcludedBlock, HunterUnitResult, LedgerCheck, LedgerUnit, PriorStatus, StatusCounts, UnitSeed, UnitStatus } from './types.ts'
 
 /** Raised for an operation the ledger's current state does not allow. */
 export class LedgerError extends Error {
-  constructor(readonly problems: readonly string[]) {
+  /** The problems the operation found, one per line. */
+  readonly problems: readonly string[]
+
+  /**
+   * @param problems - the problems the operation found.
+   */
+  constructor(problems: readonly string[]) {
     super(problems.join('\n'))
     this.name = 'LedgerError'
+    this.problems = problems
   }
 }
 
 /**
- * Validate a ledger with the skill's validator.
+ * Validate a ledger with the skill's own validator.
  * @param ledger - the units.
  * @returns the validator's messages, empty when valid.
  */
@@ -342,8 +281,8 @@ export function patchUnit(ledger: readonly LedgerUnit[], id: string, fields: Rea
  * @param ledger - the units.
  * @returns the counts, with every status present.
  */
-export function statusCounts(ledger: readonly LedgerUnit[]): Record<UnitStatus, number> {
-  const counts: Record<UnitStatus, number> = { planned: 0, in_progress: 0, covered: 0, candidate: 0, blocked: 0, deferred: 0, out_of_scope: 0, not_applicable: 0 }
+export function statusCounts(ledger: readonly LedgerUnit[]): StatusCounts {
+  const counts: StatusCounts = { planned: 0, in_progress: 0, covered: 0, candidate: 0, blocked: 0, deferred: 0, out_of_scope: 0, not_applicable: 0 }
   for (const unit of ledger) counts[unit.status] += 1
   return counts
 }
