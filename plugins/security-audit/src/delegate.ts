@@ -8,14 +8,21 @@
  * reaches the ledger, the candidate store or `findings.json`.
  *
  * The isolation is the harness's: a child's working directory is its
- * workspace-write boundary, so a role writes only inside its own `scratch/` and
- * reads the target freely. The audit workspace's network setting must be off;
- * the gate refuses to start a role without it.
+ * workspace-write boundary, so a role writes only inside its own working copy
+ * and reads the target freely. Every role gets one disposable copy of the
+ * reviewed tree at `<run>/agents/<id>/work/` (A644), made with
+ * `git archive | tar`, which it may edit and build in; the copy is removed when
+ * the role finishes and its artifacts are kept. A role may also start the
+ * target harness inside that copy, at most twice per run, under bwrap and its
+ * own scratch HOME (`audit_harness`). The audit workspace's network setting
+ * must be off; the gate refuses to start a role without it.
  * @module @delorun/plugin-security-audit/delegate
  */
-import { constants } from 'node:fs'
-import { lstat, mkdir, open } from 'node:fs/promises'
-import { join } from 'node:path'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { constants, existsSync } from 'node:fs'
+import { chmod, lstat, mkdir, open, writeFile as writeFileAsync } from 'node:fs/promises'
+import { createServer } from 'node:net'
+import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode, SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
@@ -26,6 +33,8 @@ import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import { modeledRoleOf, routeFor, type Config, type ModeledRole, type RoleModelOverride, type RoleModelOverrides } from './config.ts'
 import { requireMutable, runContext, type RunContext } from './run-context.ts'
 import {
+  claimOf,
+  coordinatingSession,
   forgetClaim,
   inRun,
   modelOf,
@@ -38,7 +47,7 @@ import {
   type HarnessState,
   type RunLocation,
 } from './store.ts'
-import type { BriefKind, CheckIn, ModelRoute, RoleModels } from './types.ts'
+import type { BriefKind, CheckIn, ModelRoute, NestedStart, RoleModels, WorkCopy } from './types.ts'
 import {
   applyHunterResult,
   assignUnits,
@@ -61,6 +70,16 @@ import {
   type CandidateEntry,
 } from './candidates.ts'
 import { proposedRecord, resultProblems, type GateContext } from './gate.ts'
+import {
+  bytesText,
+  copyGateProblem,
+  createWorkCopy,
+  freeDiskBytes,
+  NESTED_HARNESS_CAP,
+  NESTED_PORT_RANGE,
+  removeWorkCopy,
+  type CopyMeasurement,
+} from './scripts-copy.ts'
 import { ledgerValidator } from './skill.ts'
 import { writeLedger, writeRunMetadata } from './report.ts'
 import {
@@ -359,22 +378,107 @@ function sandboxModeAt(ctx: Context): SandboxMode {
   return ctx.get('sandboxPolicy')?.resolve({}).mode ?? 'workspace-write';
 }
 
+/** One role's prepared work: its working copy, its artifacts root, and what the copy holds. */
+interface RoleWork {
+  /** The absolute working copy, the role's cwd and only writable root. */
+  readonly work: string
+  /** The run-owned directory its named artifacts are promoted into. */
+  readonly artifacts: string
+  /** The copy's record, as the run metadata states it. */
+  readonly copy: WorkCopy
+}
+
 /**
- * Create a role's scratch and artifacts roots, refusing a symbolic link or a
- * special file where a directory belongs.
- * @param run - the role's run.
- * @param agentId - the role's canonical agent id.
- * @returns the absolute scratch and artifacts directories.
- * @throws {Error} when a path component is not a real directory.
+ * How many working copies the run holds now: a reserved copy counts, and a
+ * removed one does not.
+ * @param state - the run's state.
+ * @returns the count.
  */
-async function createRoleDirectories(run: RunLocation, agentId: string): Promise<{ readonly scratch: string; readonly artifacts: string }> {
-  if (!isCanonicalAgentId(agentId)) throw new Error('agent id ' + JSON.stringify(agentId) + ' is not canonical');
-  const scratch = inRun(run, 'agents/' + agentId + '/scratch');
-  const artifacts = inRun(run, 'agents/' + agentId + '/artifacts');
-  for (const directory of [scratch, artifacts]) {
-    await ensureDirectory(directory);
+function liveCopies(state: HarnessState): number {
+  return Object.values(state.agents).filter(entry => entry.work !== undefined && entry.work.removed_at === null).length
+}
+
+/**
+ * Make a role's working copy and its artifacts root, refusing a symbolic link
+ * or a special file where a directory belongs and refusing to copy when the
+ * run holds its cap of copies or the disk is below its floor.
+ * @param input - the run, its target, its state, the role's agent id and the call's signal.
+ * @returns the copy and the artifacts root.
+ * @throws {Error} naming the cap or the floor and what a copy measures, or the target's missing revision.
+ */
+async function prepareRoleWork(input: {
+  readonly run: RunLocation
+  readonly target: string
+  readonly state: HarnessState
+  readonly agentId: string
+  readonly signal: AbortSignal
+}): Promise<RoleWork> {
+  if (!isCanonicalAgentId(input.agentId)) throw new Error('agent id ' + JSON.stringify(input.agentId) + ' is not canonical')
+  if (input.state.source_ref.commit === null) {
+    throw new Error('this target has no Git commit, so there is no reviewed revision to copy: the audit copies the target with git archive, so commit the target and start the run again')
   }
-  return { scratch, artifacts };
+  const artifacts = inRun(input.run, 'agents/' + input.agentId + '/artifacts')
+  await ensureDirectory(artifacts)
+  // The role's own slot is reserved before its copy is made, so it does not count against the cap here.
+  const own = input.state.agents[input.agentId]?.work
+  const problem = copyGateProblem({
+    live: liveCopies(input.state) - (own !== undefined && own.removed_at === null ? 1 : 0),
+    freeBytes: await freeDiskBytes(input.run.dir),
+    measured: input.state.copy_measurement,
+  })
+  if (problem !== undefined) throw new Error(problem)
+  const work = inRun(input.run, 'agents/' + input.agentId + '/work')
+  const copy = await createWorkCopy({
+    target: input.target,
+    revision: input.state.source_ref.commit,
+    destination: work,
+    reviewed: !input.state.source_ref.dirty,
+    signal: input.signal,
+  })
+  return { work, artifacts, copy: { ...copy, path: 'agents/' + input.agentId + '/work' } }
+}
+
+/**
+ * Record what a role's copy measured, once it has been made, so the run's
+ * metadata states the cost and the next role's gate can state it too.
+ * @param files - the run's file access.
+ * @param run - the run.
+ * @param agentId - the role's agent id.
+ * @param copy - the copy's record.
+ */
+async function recordRoleWork(files: RunContext['files'], run: RunLocation, agentId: string, copy: WorkCopy): Promise<void> {
+  await mutate(files, run, async (state) => {
+    const entry = state.agents[agentId]
+    if (entry !== undefined) entry.work = copy
+    state.copy_measurement = { bytes: copy.bytes, files: copy.files }
+    return { value: undefined }
+  })
+}
+
+/**
+ * Remove a role's working copy when it finishes, keeping its artifacts, and
+ * record that it is gone.
+ * @param ctx - the plugin context, for a removal that failed.
+ * @param context - the run context.
+ * @param agentId - the role's agent id.
+ */
+async function releaseRoleWork(ctx: Context, context: RunContext, agentId: string): Promise<void> {
+  try {
+    await stopNestedHarnesses({ ctx, context, agentId })
+  } catch (error: unknown) {
+    ctx.logger.warn('security-audit: stopping the nested harness of %s failed: %s', agentId, error instanceof Error ? error.message : String(error))
+  }
+  const work = inRun(context.run, 'agents/' + agentId + '/work')
+  try {
+    await removeWorkCopy(work)
+  } catch (error: unknown) {
+    ctx.logger.warn('security-audit: removing the working copy of %s failed: %s', agentId, error instanceof Error ? error.message : String(error))
+  }
+  await mutate(context.files, context.run, async (state) => {
+    const entry = state.agents[agentId]
+    if (entry?.work !== undefined && entry.work.removed_at === null) entry.work = { ...entry.work, removed_at: now() }
+    return { value: undefined }
+  })
 }
 
 /**
@@ -554,7 +658,8 @@ async function runAttempt(input: {
   readonly assigned: readonly string[];
   readonly ownedUnits: readonly LedgerUnit[];
   readonly brief: string;
-  readonly scratch: string;
+  /** The role's working copy: its cwd, and the root its named artifacts are promoted from. */
+  readonly work: string;
   readonly artifacts: string;
   readonly signal: AbortSignal;
 }): Promise<AttemptResult> {
@@ -571,7 +676,7 @@ async function runAttempt(input: {
     label: input.role + ' ' + input.agentId,
     prompt: [{ type: 'text', text: input.brief }],
     parent: input.parent,
-    cwd: input.scratch,
+    cwd: input.work,
     maxDepth: depth === undefined ? 1 : Math.min(depth, 1),
     ...provider.capabilities.outputSchema ? { outputSchema: schema } : {},
     ...Object.keys(options).length === 0 ? {} : { agentOptions: options },
@@ -597,7 +702,7 @@ async function runAttempt(input: {
   const value = structuredValue(result.structured, result.output);
   if (value === undefined) return { value: {}, problems: ['the ' + input.role + ' returned no structured result object'], promoted: [], childId: started.childId, model };
   const outcome = await promoteArtifacts({
-    scratch: input.scratch,
+    scratch: input.work,
     artifacts: input.artifacts,
     agentId: input.agentId,
     references: artifactRefs(input.role, value),
@@ -1148,7 +1253,7 @@ export function registerDelegationTool(ctx: Context, config: Config): void {
   ctx.tools.register(defineTool({
     name: 'audit_delegate',
     presentCall: args => ({ card: 'generic', title: 'Audit ' + args.role, kind: 'other', rawInput: args }),
-    description: 'Assign coverage and delegate one audit role: recon, hunt, verify, final-verify, critique or final-clean. The call composes the deterministic brief from the vendored skill, starts one fresh child in its own scratch directory under its structured-result schema, waits for the result, promotes the files it names, runs the validation gate and records only accepted evidence. Start the four reconnaissance calls, or a wave\u2019s hunters, in one message so they run in parallel; a check-in the answer reports must be given to the person before the next stage.',
+    description: 'Assign coverage and delegate one audit role: recon, hunt, verify, final-verify, critique or final-clean. The call composes the deterministic brief from the vendored skill, starts one fresh child in its own working copy of the reviewed tree under its structured-result schema, waits for the result, promotes the files it names, runs the validation gate and records only accepted evidence. Start the four reconnaissance calls, or a wave\u2019s hunters, in one message so they run in parallel; a check-in the answer reports must be given to the person before the next stage.',
     parameters: {
       role: { type: 'string', required: true, enum: [...ROLE], description: 'recon, hunt, verify, final-verify, critique or final-clean.' },
       coverage_ids: { type: 'array', items: { type: 'string' }, description: 'For role=hunt: the planned coverage ids, in priority order.' },
@@ -1233,6 +1338,12 @@ export function registerDelegationTool(ctx: Context, config: Config): void {
             : args.role === 'verify'
               ? nextLedger.filter(unit => unit.result_fingerprints.includes(String(args.fingerprint)) || unit.agent_id === agentId)
               : [];
+          const copyProblem = copyGateProblem({
+            live: liveCopies(state),
+            freeBytes: await freeDiskBytes(context.run.dir),
+            measured: state.copy_measurement,
+          });
+          if (copyProblem !== undefined) throw new Error(copyProblem);
           const entry: AgentEntry = {
             role: roleOf(args.role),
             kind: kindOf(args.role),
@@ -1244,6 +1355,16 @@ export function registerDelegationTool(ctx: Context, config: Config): void {
             exec: { runs: 0, seconds: 0 },
             promoted: [],
             wave: units[0]?.wave ?? state.wave,
+          };
+          entry.work = {
+            path: 'agents/' + agentId + '/work',
+            revision: state.source_ref.commit,
+            reviewed: !state.source_ref.dirty,
+            bytes: 0,
+            files: 0,
+            seconds: 0,
+            created_at: now(),
+            removed_at: null,
           };
           state.agents[agentId] = entry;
           state.invocations += 1;
@@ -1262,39 +1383,56 @@ export function registerDelegationTool(ctx: Context, config: Config): void {
           };
         }
         const agentId = plan.agentId;
-        const directories = await createRoleDirectories(context.run, agentId);
-        const isolation = isolationProblem(ctx, directories.scratch);
-        if (isolation !== undefined) {
-          await failDelegation({ files: context.files, run: context.run, agentId, reason: isolation, assigned });
-          throw new Error(isolation);
-        }
-        let brief: string;
-        try {
-          const snapshot = await readRun(context.files, context.run);
-          brief = composeBrief({
-            ctx, config, context, snapshot, agentId, directories,
-            role: args.role,
-            candidates: snapshot.candidates,
-            units: plan.units,
-            note: [args.note, attempt === 0 ? undefined : 'A previous result was refused:\n' + lastProblems.join('\n')].filter(Boolean).join('\n\n') || undefined,
-            focus: args.focus,
-            fingerprint: args.fingerprint,
-          });
-          await context.files.write(inRun(context.run, 'agents/' + agentId + '/brief.md'), brief);
-        } catch (error: unknown) {
-          const reason = error instanceof Error ? error.message : String(error);
-          await failDelegation({ files: context.files, run: context.run, agentId, reason, assigned });
-          throw error;
-        }
-        const attemptResult = await runAttempt({
-          ctx, config, context, parent: agent, role: args.role, agentId,
-          assigned, ownedUnits: plan.units, brief,
-          scratch: directories.scratch, artifacts: directories.artifacts, signal: exec.signal,
+        const prepared = await prepareRoleWork({
+          run: context.run,
+          target: context.target,
+          state: await readState(context.files, context.run),
+          agentId,
+          signal: exec.signal,
         }).catch(async (error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
           await failDelegation({ files: context.files, run: context.run, agentId, reason, assigned });
           throw error;
         });
+        await recordRoleWork(context.files, context.run, agentId, prepared.copy);
+        let attemptResult: AttemptResult;
+        try {
+          const isolation = isolationProblem(ctx, prepared.work);
+          if (isolation !== undefined) {
+            await failDelegation({ files: context.files, run: context.run, agentId, reason: isolation, assigned });
+            throw new Error(isolation);
+          }
+          let brief: string;
+          try {
+            const snapshot = await readRun(context.files, context.run);
+            brief = composeBrief({
+              ctx, config, context, snapshot, agentId,
+              directories: { scratch: prepared.work, artifacts: prepared.artifacts },
+              role: args.role,
+              candidates: snapshot.candidates,
+              units: plan.units,
+              note: [args.note, attempt === 0 ? undefined : 'A previous result was refused:\n' + lastProblems.join('\n')].filter(Boolean).join('\n\n') || undefined,
+              focus: args.focus,
+              fingerprint: args.fingerprint,
+            });
+            await context.files.write(inRun(context.run, 'agents/' + agentId + '/brief.md'), brief);
+          } catch (error: unknown) {
+            const reason = error instanceof Error ? error.message : String(error);
+            await failDelegation({ files: context.files, run: context.run, agentId, reason, assigned });
+            throw error;
+          }
+          attemptResult = await runAttempt({
+            ctx, config, context, parent: agent, role: args.role, agentId,
+            assigned, ownedUnits: plan.units, brief,
+            work: prepared.work, artifacts: prepared.artifacts, signal: exec.signal,
+          }).catch(async (error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error);
+            await failDelegation({ files: context.files, run: context.run, agentId, reason, assigned });
+            throw error;
+          });
+        } finally {
+          await releaseRoleWork(ctx, context, agentId);
+        }
         if (attemptResult.problems.length > 0) {
           lastProblems = [...attemptResult.problems];
           await failDelegation({ files: context.files, run: context.run, agentId, reason: lastProblems.join('\n'), assigned, value: attemptResult.value });
@@ -1321,6 +1459,335 @@ export function registerDelegationTool(ctx: Context, config: Config): void {
       throw new Error('the ' + args.role + ' result was refused after ' + String(config.resultRetries + 1) + ' attempt(s):\n' + lastProblems.join('\n'));
     },
   }));
+  registerHarnessTool(ctx, config);
+}
+
+
+/** The nested harnesses this process started, by run and agent, so a stop can wait for the exit. */
+const nestedHarnesses = new Map<string, { readonly child: ChildProcess; readonly port: number; readonly startedAt: string }>()
+
+/**
+ * The key one role's nested harness is held under.
+ * @param run - the role's run.
+ * @param agentId - the role's agent id.
+ * @returns the key.
+ */
+function nestedKey(run: RunLocation, agentId: string): string {
+  return run.dir + '\u0000' + agentId
+}
+
+/**
+ * Find bubblewrap, the only runner this host offers: Landlock is absent, so a
+ * nested harness is confined by bwrap alone (verified on this host, with
+ * `--unshare-net` working inside the existing sandbox).
+ * @returns the path of the executable, or `undefined` when it is not installed.
+ */
+function bwrapPath(): string | undefined {
+  for (const path of ['/usr/bin/bwrap', '/bin/bwrap', '/usr/local/bin/bwrap']) {
+    if (existsSync(path)) return path
+  }
+  return undefined
+}
+
+/**
+ * The first spare port of the nested harness range that this run has not
+ * already given to a nested start.
+ * @param used - the ports the run's starts hold.
+ * @returns the port, proved free to bind on the loopback address.
+ * @throws {Error} naming the range when every one is taken.
+ */
+async function availablePort(used: readonly number[]): Promise<number> {
+  for (const port of NESTED_PORT_RANGE) {
+    if (used.includes(port)) continue
+    const free = await new Promise<boolean>(resolve => {
+      const server = createServer()
+      server.once('error', () => { resolve(false) })
+      server.listen(port, '127.0.0.1', () => { server.close(() => { resolve(true) }) })
+    })
+    if (free) return port
+  }
+  throw new Error('every port from ' + String(NESTED_PORT_RANGE[0]) + ' to ' + String(NESTED_PORT_RANGE[NESTED_PORT_RANGE.length - 1]) + ' is in use, so a nested harness cannot take a spare one; stop the process holding one and retry')
+}
+
+/** What a nested start runs: the command, its arguments and the environment of its stub provider. */
+interface NestedCommand {
+  /** The executable. */
+  readonly command: string
+  /** Its arguments. */
+  readonly args: readonly string[]
+  /** The environment it starts with. */
+  readonly env: Readonly<Record<string, string>>
+}
+
+/**
+ * The command a nested start runs and the environment that keeps it off the
+ * network: a stub provider and a dummy key (see the profile patch the caller
+ * writes), its own scratch HOME, and its spare port.
+ * @param input - the role's working copy, its scratch HOME and its port.
+ * @returns the command and its environment.
+ */
+function nestedCommand(input: { readonly work: string; readonly home: string; readonly port: number }): NestedCommand {
+  const env: Record<string, string> = {
+    PATH: '/usr/local/bin:/usr/bin:/bin',
+    HOME: input.home,
+    TMPDIR: input.home + '/tmp',
+    DSH_HOME: input.home,
+    DELORUN_HOME: input.home,
+    DELORUN_PROFILE: 'nested',
+    PORT: String(input.port),
+    DELORUN_PORT: String(input.port),
+    DEEPSEEK_API_KEY: 'dummy',
+    DELORUN_MODEL_PROVIDER: 'stub',
+  }
+  const command = process.env['DELORUN_SECURITY_AUDIT_HARNESS'] ?? 'delorun'
+  return { command, args: ['headless', 'Check that this working copy boots and exit.'], env }
+}
+
+/**
+ * The bwrap argument list that confines one nested harness: its own network
+ * namespace, its copy and scratch HOME writable, and the host's own files read
+ * only.
+ * @param input - the working copy, the scratch HOME, the port and the command.
+ * @returns the executable and its arguments.
+ * @throws {Error} when bwrap is not installed.
+ */
+function bwrapArguments(input: { readonly work: string; readonly home: string; readonly port: number; readonly run: NestedCommand }): { readonly command: string; readonly args: string[] } {
+  const bwrap = bwrapPath()
+  if (bwrap === undefined) {
+    throw new Error('the nested harness runs under bwrap, the only confinement this host offers (it has no Landlock); install bubblewrap and retry')
+  }
+  const args: string[] = ['--unshare-net', '--die-with-parent', '--new-session', '--clearenv']
+  for (const directory of ['/usr', '/bin', '/lib', '/lib64', '/etc', '/opt']) {
+    if (existsSync(directory)) args.push('--ro-bind', directory, directory)
+  }
+  const nodeDirectory = dirname(process.execPath)
+  if (!['/usr', '/bin', '/usr/local'].some(root => nodeDirectory === root || nodeDirectory.startsWith(root + '/'))) {
+    args.push('--ro-bind', nodeDirectory, nodeDirectory)
+  }
+  args.push('--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp')
+  args.push('--bind', input.work, input.work, '--bind', input.home, input.home)
+  args.push('--chdir', input.work)
+  for (const [name, value] of Object.entries(input.run.env)) args.push('--setenv', name, value)
+  args.push('--', input.run.command, ...input.run.args)
+  return { command: bwrap, args }
+}
+
+/**
+ * Write the stub provider a nested start uses, so it needs no network and no
+ * real key: a pi-ai route named `stub` on a closed loopback port, and the
+ * default-model row that selects it. The profile patch is a best effort: a
+ * nested Delorun that refuses it reports its own exit, which the run records.
+ * @param home - the scratch HOME, absolute.
+ */
+async function writeStubProfile(home: string): Promise<void> {
+  const profile = join(home, 'profiles', 'nested')
+  await mkdir(profile, { recursive: true, mode: 0o700 })
+  const patch = [
+    '# The stub provider a security-audit nested harness runs on: no network, no real key.',
+    '- id: llm-pi-ai',
+    '  config:',
+    '    providers:',
+    '      stub:',
+    '        apiKeyEnv: DEEPSEEK_API_KEY',
+    '        baseURL: http://127.0.0.1:9/v1',
+    '        models: [stub]',
+    '- id: agent-default-model',
+    '  config:',
+    '    provider: stub',
+    '    model: stub',
+    '',
+  ].join('\n')
+  await writeFileAsync(join(profile, 'cordis.patch.yml'), patch, { mode: 0o600 })
+  const credentials = ['version: 1', 'refs:', '  DEEPSEEK_API_KEY: dummy', ''].join('\n')
+  await writeFileAsync(join(home, '.credentials.yaml'), credentials, { mode: 0o600 })
+}
+
+/**
+ * Start one nested Delorun from a role's working copy.
+ * @param input - the plugin context, the run context, the role's agent id and its copy.
+ * @returns the start, as the tool answer states it.
+ * @throws {Error} naming the cap when the run has spent it, or why the start could not be made.
+ */
+async function startNestedHarness(input: {
+  readonly ctx: Context
+  readonly context: RunContext
+  readonly agentId: string
+  readonly copy: WorkCopy
+}): Promise<Record<string, Json>> {
+  const starts = input.context.state.nested_harness?.starts ?? []
+  if (starts.length >= NESTED_HARNESS_CAP) {
+    throw new Error('this run has already started ' + String(starts.length) + ' nested harnesses, its cap of ' + String(NESTED_HARNESS_CAP) + '; record what the last one showed and stop it before starting another')
+  }
+  const port = await availablePort(starts.map(start => start.port))
+  const home = inRun(input.context.run, 'agents/' + input.agentId + '/nested/start-' + String(starts.length + 1) + '/home')
+  await mkdir(join(home, 'tmp'), { recursive: true, mode: 0o700 })
+  await chmod(home, 0o700)
+  await writeStubProfile(home)
+  const work = inRun(input.context.run, input.copy.path)
+  const command = nestedCommand({ work, home, port })
+  const wrapped = bwrapArguments({ work, home, port, run: command })
+  const child = spawn(wrapped.command, wrapped.args, { cwd: work, detached: true, stdio: 'ignore' })
+  const startedAt = now()
+  let failure: { readonly code: number | null; readonly signal: string } | undefined
+  child.on('error', (error: Error) => { failure = { code: null, signal: 'spawn error: ' + error.message } })
+  const exited = new Promise<void>(resolve => {
+    child.once('exit', () => { resolve() })
+    child.once('error', () => { resolve() })
+  })
+  const raced = await Promise.race([exited.then(() => 'exited' as const), new Promise<'running'>(resolve => setTimeout(() => { resolve('running') }, 1500))])
+  const start: NestedStart = {
+    agent_id: input.agentId,
+    port,
+    home: 'agents/' + input.agentId + '/nested/start-' + String(starts.length + 1) + '/home',
+    pid: child.pid ?? null,
+    started_at: startedAt,
+    stopped_at: raced === 'exited' ? now() : null,
+    exit: raced === 'exited' ? { code: child.exitCode, signal: failure?.signal ?? child.signalCode } : null,
+  }
+  await mutate(input.context.files, input.context.run, async (state) => {
+    state.nested_harness = { cap: NESTED_HARNESS_CAP, starts: [...state.nested_harness?.starts ?? [], start] }
+    return { value: undefined }
+  })
+  if (start.stopped_at === null) nestedHarnesses.set(nestedKey(input.context.run, input.agentId), { child, port, startedAt })
+  return {
+    status: raced === 'exited' ? 'exited' : 'running',
+    port,
+    home: start.home,
+    pid: start.pid,
+    exit: start.exit === null ? null : { ...start.exit },
+    starts: starts.length + 1,
+    cap: NESTED_HARNESS_CAP,
+    provider: 'stub',
+    key: 'dummy',
+    runner: bwrapPath() ?? 'none',
+  }
+}
+
+/**
+ * Stop one nested harness and record its exit.
+ * @param input - the plugin context, the run context, the role's agent id and the port, or every running start of the role.
+ * @returns how many it stopped.
+ */
+async function stopNestedHarnesses(input: { readonly ctx: Context; readonly context: RunContext; readonly agentId: string }): Promise<number> {
+  const running = (input.context.state.nested_harness?.starts ?? []).filter(start => start.agent_id === input.agentId && start.stopped_at === null)
+  if (running.length === 0) return 0
+  const exits = new Map<number, { readonly code: number | null; readonly signal: string | null }>()
+  for (const start of running) {
+    const held = nestedHarnesses.get(nestedKey(input.context.run, input.agentId))
+    const child = held?.port === start.port ? held.child : undefined
+    if (child === undefined) {
+      if (start.pid !== null) {
+        try { process.kill(-start.pid, 'SIGTERM') } catch { /* already gone */ }
+      }
+      exits.set(start.port, { code: null, signal: 'not ours to wait for' })
+      continue
+    }
+    const ended = new Promise<void>(resolve => { child.once('exit', () => { resolve() }) })
+    try { process.kill(-(child.pid ?? start.pid ?? 0), 'SIGTERM') } catch { /* already gone */ }
+    const timedOut = await Promise.race([ended.then(() => false), new Promise<boolean>(resolve => setTimeout(() => { resolve(true) }, 10_000))])
+    if (timedOut) {
+      try { process.kill(-(child.pid ?? start.pid ?? 0), 'SIGKILL') } catch { /* already gone */ }
+      await Promise.race([ended, new Promise<void>(resolve => setTimeout(resolve, 2_000))])
+    }
+    exits.set(start.port, { code: child.exitCode, signal: child.signalCode })
+    nestedHarnesses.delete(nestedKey(input.context.run, input.agentId))
+  }
+  await mutate(input.context.files, input.context.run, async (state) => {
+    const starts = state.nested_harness?.starts
+    if (starts === undefined) return { value: undefined }
+    state.nested_harness = {
+      cap: state.nested_harness?.cap ?? NESTED_HARNESS_CAP,
+      starts: starts.map(start => start.stopped_at !== null || start.agent_id !== input.agentId
+        ? start
+        : { ...start, stopped_at: now(), exit: exits.get(start.port) ?? null }),
+    }
+    return { value: undefined }
+  })
+  return exits.size
+}
+
+/**
+ * Register `audit_harness`: a role's bounded way to start the target harness
+ * inside its own working copy. Two starts per run, each with its own scratch
+ * HOME, a spare port and bwrap's network namespace, and a stop that records the
+ * exit.
+ * @param ctx - the plugin context.
+ * @param config - the agent row's configuration.
+ */
+export function registerHarnessTool(ctx: Context, config: Config): void {
+  ctx.tools.register(defineTool({
+    name: 'audit_harness',
+    presentCall: args => ({ card: 'generic', title: 'Nested harness ' + args.action, kind: 'other', rawInput: args }),
+    description: 'Start or stop one nested Delorun inside your working copy, at most two starts per run. A start runs the target harness under bwrap with its own network namespace, its own scratch HOME (mode 0700), a spare port from 19988 to 19997 and a stub provider with a dummy key, so it needs no network and no real model. Use it to prove a behaviour you can only observe by running the harness; stop it afterwards, and the answer records its exit.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['start', 'stop'], description: 'start one nested harness from your working copy, or stop the ones you started.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          action: { type: 'string', required: true },
+          status: { type: 'string', required: true },
+          port: { oneOf: [{ type: 'integer' }, { type: 'null' }], required: true },
+          home: { oneOf: [{ type: 'string' }, { type: 'null' }], required: true },
+          pid: { oneOf: [{ type: 'integer' }, { type: 'null' }], required: true },
+          exit: { oneOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }], required: true },
+          stops: { type: 'integer', required: true },
+          starts: { type: 'integer', required: true },
+          cap: { type: 'integer', required: true },
+          runner: { type: 'string', required: true },
+          summary: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => text(value.summary),
+    },
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const agent = requireAgent(exec)
+      const context = await runContext(ctx, agent, exec.signal, config.runsDir)
+      requireMutable(context.state)
+      const claim = await claimOf(context.files, context.root, context.target, agent.session.id, coordinatingSession(ctx, agent).id)
+      if (claim === undefined) throw new Error('audit_harness runs from a delegated role: this chat claimed no brief of the run')
+      const entry = (await readState(context.files, claim.run)).agents[claim.agentId]
+      if (entry?.work === undefined || entry.work.removed_at !== null) {
+        throw new Error('your working copy is not live, so there is no tree to start the harness from; audit_harness runs only while the role that owns a copy is working')
+      }
+      if (args.action === 'start') {
+        const answer = await startNestedHarness({ ctx, context, agentId: claim.agentId, copy: entry.work })
+        return {
+          action: 'start',
+          status: String(answer.status),
+          port: answer.port as number,
+          home: String(answer.home),
+          pid: answer.pid as number | null,
+          exit: (answer.exit ?? null) as Record<string, Json> | null,
+          stops: 0,
+          starts: answer.starts as number,
+          cap: answer.cap as number,
+          runner: String(answer.runner),
+          summary: 'nested harness ' + String(answer.status) + ' on port ' + String(answer.port) + ' with HOME ' + String(answer.home) + (answer.exit === null ? '; stop it when you are done' : '; it exited before the check could see it running'),
+        }
+      }
+      const stopped = await stopNestedHarnesses({ ctx, context, agentId: claim.agentId })
+      const after = await readState(context.files, claim.run)
+      const starts = after.nested_harness?.starts ?? []
+      const last = starts.filter(start => start.agent_id === claim.agentId).at(-1)
+      return {
+        action: 'stop',
+        status: stopped === 0 ? 'nothing-running' : 'stopped',
+        port: last?.port ?? null,
+        home: last?.home ?? null,
+        pid: last?.pid ?? null,
+        exit: (last?.exit ?? null) as Record<string, Json> | null,
+        stops: stopped,
+        starts: starts.length,
+        cap: after.nested_harness?.cap ?? NESTED_HARNESS_CAP,
+        runner: bwrapPath() ?? 'none',
+        summary: stopped === 0 ? 'no nested harness of yours was running' : 'stopped ' + String(stopped) + ' nested harness(es); last exit ' + JSON.stringify(last?.exit ?? null),
+      }
+    },
+  }))
 }
 
 /** The arguments one delegation call carries. */
