@@ -22,6 +22,7 @@ import {
 } from '../src/ledger.ts'
 import { resultProblems, type GateContext } from '../src/gate.ts'
 import { expectedFingerprints, findingsProblems, reportProblems } from '../src/report.ts'
+import { rcSeedUnits } from '../src/rc-profile.ts'
 import { isSafePath } from '../src/tools/intake.ts'
 import { blockNames, fencedBlockAfter, REPORT_SCHEMA, schemaBranch, skillBlock, skillFile, skillFileNames } from '../src/skill.ts'
 
@@ -108,9 +109,36 @@ assert.deepEqual(expectedFingerprints('NEEDS_VALIDATION', [RECORD]), [RECORD.fin
 assert.deepEqual(reportProblems('NEEDS_VALIDATION', 'text', [RECORD]).length, 1)
 assert.deepEqual(reportProblems('NEEDS_VALIDATION', 'text\n<!-- audit-fingerprints: router-owner-check -->', [RECORD]), [])
 
+// The release-candidate seed: one valid, planned unit for each boundary of Delorun's
+// threat model, in the page's order, with the package that implements the defence.
+const rcSeeds = rcSeedUnits()
+assert.deepEqual(rcSeeds.map(row => row.canonical_refs.boundary), [
+  'Confinement of native commands',
+  "The home's control channels",
+  'Container isolation',
+  'Admission and listeners',
+  'Device approval',
+  'Reach providers',
+  'Sign-in',
+  'Releases, the log and the rebuild',
+  'The catalogue and revocation',
+  'Updates and rollback',
+  'Archives and untrusted chats',
+  'Logs and redaction',
+  'Verification',
+  'Parity',
+  'The web_fetch guard',
+  'Data sharing',
+])
+const rcSeeded = seedUnits([], rcSeeds)
+assert.equal(rcSeeded.added.length, 16)
+assert.deepEqual(validateLedger(rcSeeded.ledger), [])
+assert.ok(rcSeeded.ledger.every(unit => unit.status === 'planned' && unit.starting_paths.length > 0 && unit.ordinary_attack_class_block !== null))
+assert.equal(new Set(rcSeeds.map(row => row.starting_paths[0])).size > 8, true)
+
 // The skill's path rule, which intake and the gate share.
 assert.equal(isSafePath('src/router.ts'), true)
 assert.equal(isSafePath('../router.ts'), false)
 assert.equal(isSafePath('/etc/passwd'), false)
 
-console.log('check-engine: ' + String(REPORT_SCHEMA === null ? 0 : 1) + ' schema, ' + String(skillFileNames().length) + ' pack files, ' + String(findingsValidator.validateDocument([RECORD], REPORT_SCHEMA).length) + ' findings problems, all checks passed')
+console.log('check-engine: ' + String(rcSeeded.added.length) + ' rc boundaries, ' + String(REPORT_SCHEMA === null ? 0 : 1) + ' schema, ' + String(skillFileNames().length) + ' pack files, ' + String(findingsValidator.validateDocument([RECORD], REPORT_SCHEMA).length) + ' findings problems, all checks passed')
