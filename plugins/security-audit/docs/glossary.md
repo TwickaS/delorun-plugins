@@ -1,7 +1,5 @@
 # Security audit glossary
 
-English | [中文](glossary.zh.md)
-
 The words this plugin's documentation, interface text and prompts use, one term per concept, in the form [Delorun's glossary](https://github.com/TwickaS/delorun/blob/main/delorun/docs/reference/glossary.md) uses. Each entry starts with one plain-English sentence, then adds a technical note where the code uses another word. These entries join Delorun's glossary when the plugin's pages are wired into `delorun/docs`.
 
 ## Contents

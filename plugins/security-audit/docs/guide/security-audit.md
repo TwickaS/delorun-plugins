@@ -4,8 +4,6 @@ description: "Audit a repository for security problems: choose the profile, set 
 
 # Audit a repository for security problems
 
-English | [中文](security-audit.zh.md)
-
 ## Summary
 
 This page helps you run a [security audit run](../../reference/glossary.md#security-audit-run) over a repository and read what it finds. You need Delorun running ([Install and first run](../get-started/install.md)), the **Security audit** plugin installed and turned on at your computer, and a workspace that holds the repository you want audited.
