@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Security audit",
+    "description": "A source-level audit of a repository through Cloudflare's security-audit workflow: reconnaissance, coverage-led hunting, independent validation and a report, with a pane that shows the run while it happens."
+  }
+}

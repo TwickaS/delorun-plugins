@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "安全审计",
+    "description": "借助 Cloudflare 的 security-audit 流程对仓库做源码级审计：侦察、按覆盖单元猎捕、独立验证并出报告；面板会随运行过程实时显示进度。"
+  }
+}
